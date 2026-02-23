@@ -11,7 +11,7 @@ import json
 import pandas as pd
 
 EXCEL_NAME = "DASHBOARD MAIORES ENTREGAS.xlsx"
-OUTPUT_NAME = "dashboard.html"
+OUTPUT_NAME = "index.html"
 PHOTO_DIR = Path("assets") / "colaboradores"
 PHOTO_INPUT_DIR = Path("assets") / "fotos_colaboradores"
 
