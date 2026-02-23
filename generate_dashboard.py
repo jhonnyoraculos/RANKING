@@ -145,6 +145,34 @@ def load_local_photos(base_path: Path) -> dict[str, str]:
 
 
 def load_planilha(path: Path) -> pd.DataFrame:
+    def parse_number(value: object) -> float:
+        if pd.isna(value):
+            return math.nan
+        if isinstance(value, (int, float)):
+            return float(value)
+
+        text = str(value).strip()
+        if not text:
+            return math.nan
+
+        # Mantem apenas caracteres numericos e separadores.
+        text = re.sub(r"[^0-9,.\-]", "", text)
+        if not text:
+            return math.nan
+
+        # Formato pt-BR: 1.234,56 -> 1234.56
+        if "," in text:
+            text = text.replace(".", "").replace(",", ".")
+        elif text.count(".") > 1:
+            # Remove separadores de milhar quando houver mais de um ponto.
+            parts = text.split(".")
+            text = "".join(parts[:-1]) + "." + parts[-1]
+
+        try:
+            return float(text)
+        except ValueError:
+            return math.nan
+
     def read_excel(skip_rows: int) -> pd.DataFrame:
         try:
             return pd.read_excel(path, skiprows=skip_rows)
@@ -193,7 +221,7 @@ def load_planilha(path: Path) -> pd.DataFrame:
 
     df["data"] = pd.to_datetime(df["data"], errors="coerce", dayfirst=True)
     for col in ("entregas", "peso", "valor"):
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+        df[col] = df[col].apply(parse_number).fillna(0)
     df["entregas"] = df["entregas"].where(df["entregas"] > 0, 1)
 
     df = df.dropna(how="all", subset=["data", "motorista", "entregas", "peso"])
