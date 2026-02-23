@@ -383,7 +383,6 @@ def resumir_cidades(df: pd.DataFrame) -> pd.DataFrame:
 def build_metrics(summary: pd.DataFrame, *, total_entregas: float | None = None, total_peso: float | None = None, total_valor: float | None = None) -> str:
     total_entregas = total_entregas if total_entregas is not None else summary["entregas"].sum()
     total_peso_kg = total_peso if total_peso is not None else summary["peso"].sum()
-    total_peso_t = total_peso_kg / 1000
     total_valor = total_valor if total_valor is not None else summary["valor"].sum()
 
     metric_cards = [
@@ -391,12 +390,12 @@ def build_metrics(summary: pd.DataFrame, *, total_entregas: float | None = None,
             "metric-total",
             "Total de entregas",
             format_number(total_entregas, 0),
-            f"Peso: {format_number(total_peso_t, 2)} t &bull; Valor: R$ {format_number(total_valor, 2)}",
+            f"Peso: {format_number(total_peso_kg, 3)} kg &bull; Valor: R$ {format_number(total_valor, 2)}",
         ),
         (
             "metric-primary",
-            "Peso total (t)",
-            f"{format_number(total_peso_t, 2)} t",
+            "Peso total (kg)",
+            f"{format_number(total_peso_kg, 3)} kg",
             "Somatorio do periodo",
         ),
         (
