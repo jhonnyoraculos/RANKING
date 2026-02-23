@@ -18,6 +18,10 @@ if %errorlevel% neq 0 (
 
 echo.
 echo Dashboard atualizado com sucesso.
+if exist "%~dp0index.html" if exist "%~dp0dashboard.html" (
+  del /q "%~dp0dashboard.html"
+  echo Arquivo legado dashboard.html removido. Principal: index.html
+)
 echo.
 echo Sincronizando com Git...
 
