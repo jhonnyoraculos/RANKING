@@ -507,11 +507,11 @@ def build_ranking_table(summary: pd.DataFrame, *, name_label: str = "Colaborador
         nome = row.colaborador.title()
         linhas.append(
             f"""        <tr{classe}>
-          <td>{rank:02d}</td>
-          <td>{nome}</td>
-          <td>{format_quantity(row.entregas)}</td>
-          <td>{format_number(row.peso, 2)}</td>
-          <td>R$ {format_number(row.valor, 2)}</td>
+          <td data-label="Rank">{rank:02d}</td>
+          <td data-label="{name_label}">{nome}</td>
+          <td data-label="Entregas">{format_quantity(row.entregas)}</td>
+          <td data-label="Peso (kg)">{format_number(row.peso, 2)}</td>
+          <td data-label="Valor (R$)">R$ {format_number(row.valor, 2)}</td>
         </tr>"""
         )
 
@@ -731,7 +731,7 @@ def render_dashboard(
       font-family: "Poppins", "Segoe UI", Arial, sans-serif;
       background: #ffffff;
       color: var(--text-main);
-      padding: 40px 18px 64px;
+      padding: 34px 18px 56px;
     }}
     main {{
       max-width: 1180px;
@@ -762,7 +762,8 @@ def render_dashboard(
     }}
     header.page-header h1 {{
       margin: 0;
-      font-size: 2.35rem;
+      font-size: clamp(1.55rem, 3.6vw, 2.35rem);
+      line-height: 1.18;
       color: var(--primary-dark);
       letter-spacing: -0.5px;
     }}
@@ -780,7 +781,7 @@ def render_dashboard(
     .panel {{
       background: var(--panel);
       border-radius: var(--radius-xl);
-      padding: 32px 28px;
+      padding: clamp(18px, 2.8vw, 32px) clamp(16px, 2.4vw, 28px);
       backdrop-filter: blur(20px);
       box-shadow: var(--shadow);
       display: flex;
@@ -998,7 +999,7 @@ def render_dashboard(
     .ranking-table table {{
       width: 100%;
       border-collapse: collapse;
-      min-width: 420px;
+      min-width: 520px;
     }}
     .ranking-table thead th {{
       text-align: left;
@@ -1021,6 +1022,10 @@ def render_dashboard(
     .ranking-table tbody td:nth-child(1) {{
       font-weight: 700;
       color: var(--primary);
+    }}
+    .ranking-table tbody td:nth-child(2) {{
+      white-space: normal;
+      word-break: break-word;
     }}
     .ranking-table tbody td:nth-child(3),
     .ranking-table tbody td:nth-child(4),
@@ -1093,11 +1098,14 @@ def render_dashboard(
       box-shadow: 0 10px 24px -18px rgba(76,81,191,0.55);
       margin-left: 8px;
       min-width: 160px;
+      background: #ffffff;
+      font-size: 16px;
     }}
     .filter-group {{
       display: inline-flex;
       align-items: center;
       gap: 8px;
+      flex-wrap: wrap;
       margin-bottom: 10px;
     }}
     footer {{
@@ -1105,30 +1113,129 @@ def render_dashboard(
       color: var(--text-muted);
       font-size: 0.85rem;
     }}
+    @media (max-width: 980px) {{
+      main {{
+        gap: 22px;
+      }}
+      .page-header-top {{
+        align-items: flex-start;
+      }}
+      .podium {{
+        justify-content: flex-start;
+      }}
+      .podium-card {{
+        width: min(280px, 100%);
+      }}
+    }}
     @media (max-width: 720px) {{
       body {{
-        padding: 28px 16px 48px;
+        padding: 22px 12px 40px;
       }}
       header.page-header {{
-        padding: 24px 20px;
+        padding: 18px 16px;
       }}
       .brand-logo {{
-        height: 46px;
+        height: 40px;
       }}
-      header.page-header h1 {{
-        font-size: 2rem;
+      .page-meta {{
+        gap: 8px;
+        font-size: 0.86rem;
+      }}
+      .section-heading h2 {{
+        font-size: 1.35rem;
       }}
       .metrics-grid {{
         grid-template-columns: 1fr;
       }}
+      .metric-card {{
+        min-height: 0;
+        padding: 18px 16px;
+      }}
+      .metric-value {{
+        font-size: 1.55rem;
+      }}
       .summary-grid {{
         grid-template-columns: 1fr;
       }}
+      .summary-card {{
+        min-height: 0;
+      }}
       .podium {{
-        gap: 16px;
+        margin: 12px 0;
+        gap: 12px;
       }}
       .podium-card {{
-        width: min(240px, 100%);
+        width: 100%;
+        max-width: none;
+        padding: 18px 14px;
+      }}
+      .podium-avatar,
+      .podium-avatar.has-photo img {{
+        width: 76px;
+        height: 76px;
+      }}
+      .filter-group {{
+        display: grid;
+        gap: 6px;
+        width: 100%;
+      }}
+      .filter-select {{
+        width: 100%;
+        margin-left: 0;
+      }}
+    }}
+    @media (max-width: 640px) {{
+      .ranking-table {{
+        background: transparent;
+        box-shadow: none;
+        padding: 6px 0;
+        max-height: none;
+        overflow: visible;
+      }}
+      .ranking-table table {{
+        min-width: 0;
+      }}
+      .ranking-table thead {{
+        display: none;
+      }}
+      .ranking-table tbody {{
+        display: grid;
+        gap: 10px;
+      }}
+      .ranking-table tbody tr {{
+        display: block;
+        background: rgba(255, 255, 255, 0.96);
+        border-radius: 14px;
+        padding: 12px;
+        box-shadow: 0 14px 28px -22px rgba(76, 81, 191, 0.7);
+      }}
+      .ranking-table tbody tr.is-top {{
+        background: linear-gradient(90deg, rgba(108, 92, 231, 0.16), rgba(79, 70, 229, 0.05));
+      }}
+      .ranking-table tbody td {{
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        border-bottom: none;
+        padding: 4px 0;
+      }}
+      .ranking-table tbody td::before {{
+        content: attr(data-label);
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+        font-weight: 600;
+        white-space: nowrap;
+      }}
+      .ranking-table tbody td:nth-child(3),
+      .ranking-table tbody td:nth-child(4),
+      .ranking-table tbody td:nth-child(5) {{
+        text-align: right;
+      }}
+      .ranking-table tbody tr:hover {{
+        background: rgba(255, 255, 255, 0.96);
       }}
     }}
   </style>
