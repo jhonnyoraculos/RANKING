@@ -1378,13 +1378,16 @@ def render_dashboard(
       .ranking-table table {{
         min-width: 100%;
       }}
-      .ranking-table thead th,
+      .ranking-table thead th {{
+        font-size: 0;
+        padding: 6px 6px;
+      }}
       .ranking-table tbody td {{
-        font-size: 0.78rem;
-        padding: 8px 8px;
+        font-size: 0.76rem;
+        padding: 8px 6px;
       }}
       .ranking-table thead th::after {{
-        font-size: 0.64rem;
+        font-size: 0.62rem;
       }}
     }}
     @media (max-width: 520px) {{
