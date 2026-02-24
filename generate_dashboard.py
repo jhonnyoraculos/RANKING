@@ -549,7 +549,7 @@ def build_ranking_table(summary: pd.DataFrame, *, name_label: str = "Colaborador
           <td data-label="{name_label}">{nome}</td>
           <td data-label="Entregas">{responsive_text(format_quantity(row.entregas), format_compact_number(row.entregas, 1))}</td>
           <td data-label="Peso (kg)">{responsive_text(format_number(row.peso, 2), format_compact_number(row.peso, 1))}</td>
-          <td data-label="Valor (R$)">R$ {responsive_text(format_number(row.valor, 2), format_compact_number(row.valor, 1))}</td>
+          <td data-label="Valor (R$)">{responsive_text(f"R$ {format_number(row.valor, 2)}", format_compact_number(row.valor, 1))}</td>
         </tr>"""
         )
 
@@ -558,11 +558,11 @@ def build_ranking_table(summary: pd.DataFrame, *, name_label: str = "Colaborador
       <table>
         <thead>
           <tr>
-            <th>Rank</th>
-            <th>{name_label}</th>
-            <th>Entregas</th>
-            <th>Peso (kg)</th>
-            <th>Valor (R$)</th>
+            <th data-short="RK">Rank</th>
+            <th data-short="COLAB">{name_label}</th>
+            <th data-short="ENT">Entregas</th>
+            <th data-short="PESO">Peso (kg)</th>
+            <th data-short="VALOR">Valor (R$)</th>
           </tr>
         </thead>
         <tbody>
@@ -1322,27 +1322,45 @@ def render_dashboard(
         font-size: 0.82rem;
         white-space: nowrap;
       }}
+      .ranking-table thead th {{
+        font-size: 0;
+        letter-spacing: 0;
+        text-transform: none;
+        padding-top: 6px;
+        padding-bottom: 6px;
+      }}
+      .ranking-table thead th::after {{
+        content: attr(data-short);
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: var(--text-muted);
+      }}
       .ranking-table thead th:nth-child(1),
       .ranking-table tbody td:nth-child(1) {{
-        width: 10%;
+        width: 9%;
       }}
       .ranking-table thead th:nth-child(2),
       .ranking-table tbody td:nth-child(2) {{
-        width: 38%;
+        width: 34%;
       }}
       .ranking-table thead th:nth-child(3),
       .ranking-table tbody td:nth-child(3) {{
-        width: 14%;
+        width: 13%;
       }}
       .ranking-table thead th:nth-child(4),
       .ranking-table tbody td:nth-child(4) {{
-        width: 18%;
+        width: 20%;
       }}
       .ranking-table thead th:nth-child(5),
       .ranking-table tbody td:nth-child(5) {{
-        width: 20%;
+        width: 24%;
       }}
       .ranking-table tbody td:nth-child(2) {{
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }}
+      .ranking-table tbody td:nth-child(5) {{
         overflow: hidden;
         text-overflow: ellipsis;
       }}
@@ -1364,6 +1382,9 @@ def render_dashboard(
       .ranking-table tbody td {{
         font-size: 0.78rem;
         padding: 8px 8px;
+      }}
+      .ranking-table thead th::after {{
+        font-size: 0.64rem;
       }}
     }}
     @media (max-width: 520px) {{
