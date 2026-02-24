@@ -44,6 +44,28 @@ def format_quantity(value: float) -> str:
     return format_number(value, 1)
 
 
+def format_compact_number(value: float, decimals: int = 1) -> str:
+    if pd.isna(value):
+        return "-"
+    number = float(value)
+    abs_number = abs(number)
+    if abs_number >= 1_000_000:
+        compact = format_number(number / 1_000_000, decimals).rstrip("0").rstrip(",")
+        return f"{compact} mi"
+    if abs_number >= 1_000:
+        compact = format_number(number / 1_000, decimals).rstrip("0").rstrip(",")
+        return f"{compact} mil"
+    if number.is_integer():
+        return format_number(number, 0)
+    return format_number(number, min(decimals, 2))
+
+
+def responsive_text(full_text: str, compact_text: str) -> str:
+    if full_text == compact_text:
+        return full_text
+    return f'<span class="value-full">{full_text}</span><span class="value-compact">{compact_text}</span>'
+
+
 def get_initials(nome: str) -> str:
     partes = [p for p in nome.split() if p]
     if not partes:
@@ -414,24 +436,40 @@ def build_metrics(summary: pd.DataFrame, *, total_entregas: float | None = None,
     total_entregas = total_entregas if total_entregas is not None else summary["entregas"].sum()
     total_peso_kg = total_peso if total_peso is not None else summary["peso"].sum()
     total_valor = total_valor if total_valor is not None else summary["valor"].sum()
+    entregas_text = responsive_text(
+        format_number(total_entregas, 0),
+        format_compact_number(total_entregas, 1),
+    )
+    peso_text = responsive_text(
+        f"{format_number(total_peso_kg, 3)} kg",
+        f"{format_compact_number(total_peso_kg, 1)} kg",
+    )
+    valor_text = responsive_text(
+        f"R$ {format_number(total_valor, 2)}",
+        f"R$ {format_compact_number(total_valor, 1)}",
+    )
+    resumo_text = (
+        f"Peso: {responsive_text(format_number(total_peso_kg, 3), format_compact_number(total_peso_kg, 1))} kg "
+        f"&bull; Valor: R$ {responsive_text(format_number(total_valor, 2), format_compact_number(total_valor, 1))}"
+    )
 
     metric_cards = [
         (
             "metric-total",
             "Total de entregas",
-            format_number(total_entregas, 0),
-            f"Peso: {format_number(total_peso_kg, 3)} kg &bull; Valor: R$ {format_number(total_valor, 2)}",
+            entregas_text,
+            resumo_text,
         ),
         (
             "metric-primary",
             "Peso total (kg)",
-            f"{format_number(total_peso_kg, 3)} kg",
+            peso_text,
             "Somatorio do periodo",
         ),
         (
             "metric-success",
             "Valor faturado (R$)",
-            f"R$ {format_number(total_valor, 2)}",
+            valor_text,
             "Somatorio do periodo",
         ),
     ]
@@ -474,9 +512,9 @@ def build_podium(summary: pd.DataFrame, photo_map: dict[str, str], *, sort_colum
             )
             continue
 
-        entregas = format_quantity(row.entregas)
-        peso = format_number(row.peso, 2)
-        valor = format_number(row.valor, 2)
+        entregas = responsive_text(format_quantity(row.entregas), format_compact_number(row.entregas, 1))
+        peso = responsive_text(format_number(row.peso, 2), format_compact_number(row.peso, 1))
+        valor = responsive_text(format_number(row.valor, 2), format_compact_number(row.valor, 1))
         nome_original = str(row.colaborador).strip()
         nome = nome_original.title()
         photo_src = lookup_photo(nome_original, photo_map)
@@ -490,7 +528,7 @@ def build_podium(summary: pd.DataFrame, photo_map: dict[str, str], *, sort_colum
         {avatar}
         <h3>{nome}</h3>
         <p class="podium-value">Entregas: <strong>{entregas}</strong></p>
-        <p class="podium-value">Peso total: <strong>{peso}</strong> kg</p>
+        <p class="podium-value">Peso total: <strong>{peso} kg</strong></p>
         <p class="podium-value">Valor total: <strong>R$ {valor}</strong></p>
       </article>"""
         )
@@ -509,9 +547,9 @@ def build_ranking_table(summary: pd.DataFrame, *, name_label: str = "Colaborador
             f"""        <tr{classe}>
           <td data-label="Rank">{rank:02d}</td>
           <td data-label="{name_label}">{nome}</td>
-          <td data-label="Entregas">{format_quantity(row.entregas)}</td>
-          <td data-label="Peso (kg)">{format_number(row.peso, 2)}</td>
-          <td data-label="Valor (R$)">R$ {format_number(row.valor, 2)}</td>
+          <td data-label="Entregas">{responsive_text(format_quantity(row.entregas), format_compact_number(row.entregas, 1))}</td>
+          <td data-label="Peso (kg)">{responsive_text(format_number(row.peso, 2), format_compact_number(row.peso, 1))}</td>
+          <td data-label="Valor (R$)">R$ {responsive_text(format_number(row.valor, 2), format_compact_number(row.valor, 1))}</td>
         </tr>"""
         )
 
@@ -579,16 +617,40 @@ def build_overall_summary(motoristas: pd.DataFrame, ajudantes: pd.DataFrame, pho
     top_ajudante = ajudantes_ord.iloc[0] if not ajudantes_ord.empty else None
 
     motorista_nome = top_motorista.colaborador.title() if top_motorista is not None else "Sem registros"
-    motorista_entregas = format_quantity(top_motorista.entregas) if top_motorista is not None else "-"
-    motorista_peso = format_number(top_motorista.peso, 2) if top_motorista is not None else "-"
-    motorista_valor = format_number(top_motorista.valor, 2) if top_motorista is not None else "-"
+    motorista_entregas = (
+        responsive_text(format_quantity(top_motorista.entregas), format_compact_number(top_motorista.entregas, 1))
+        if top_motorista is not None
+        else "-"
+    )
+    motorista_peso = (
+        responsive_text(format_number(top_motorista.peso, 2), format_compact_number(top_motorista.peso, 1))
+        if top_motorista is not None
+        else "-"
+    )
+    motorista_valor = (
+        responsive_text(format_number(top_motorista.valor, 2), format_compact_number(top_motorista.valor, 1))
+        if top_motorista is not None
+        else "-"
+    )
     motorista_foto = lookup_photo(top_motorista.colaborador if top_motorista is not None else None, photo_map)
     motorista_avatar_html = f'<img class="summary-avatar" src="{motorista_foto}" alt="{motorista_nome}">' if motorista_foto else ""
 
     ajudante_nome = top_ajudante.colaborador.title() if top_ajudante is not None else "Sem registros"
-    ajudante_entregas = format_quantity(top_ajudante.entregas) if top_ajudante is not None else "-"
-    ajudante_peso = format_number(top_ajudante.peso, 2) if top_ajudante is not None else "-"
-    ajudante_valor = format_number(top_ajudante.valor, 2) if top_ajudante is not None else "-"
+    ajudante_entregas = (
+        responsive_text(format_quantity(top_ajudante.entregas), format_compact_number(top_ajudante.entregas, 1))
+        if top_ajudante is not None
+        else "-"
+    )
+    ajudante_peso = (
+        responsive_text(format_number(top_ajudante.peso, 2), format_compact_number(top_ajudante.peso, 1))
+        if top_ajudante is not None
+        else "-"
+    )
+    ajudante_valor = (
+        responsive_text(format_number(top_ajudante.valor, 2), format_compact_number(top_ajudante.valor, 1))
+        if top_ajudante is not None
+        else "-"
+    )
     ajudante_foto = lookup_photo(top_ajudante.colaborador if top_ajudante is not None else None, photo_map)
     ajudante_avatar_html = f'<img class="summary-avatar" src="{ajudante_foto}" alt="{ajudante_nome}">' if ajudante_foto else ""
 
@@ -811,6 +873,14 @@ def render_dashboard(
       color: var(--text-muted);
       font-size: 0.95rem;
     }}
+    .value-compact {{
+      display: none;
+    }}
+    .value-full,
+    .value-compact {{
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }}
     .metrics-grid {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1020,6 +1090,7 @@ def render_dashboard(
       color: var(--text-muted);
       padding: 12px 16px;
       border-bottom: 1px solid rgba(99, 102, 241, 0.12);
+      white-space: nowrap;
     }}
     .ranking-table tbody td {{
       padding: 14px 16px;
@@ -1148,6 +1219,17 @@ def render_dashboard(
       header.page-header {{
         padding: 14px 12px;
       }}
+      .page-header-top {{
+        width: 100%;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 10px;
+      }}
+      header.page-header h1 {{
+        flex: 1 1 auto;
+        min-width: 0;
+      }}
       .brand-logo {{
         height: 34px;
       }}
@@ -1258,6 +1340,14 @@ def render_dashboard(
       .ranking-table tbody td {{
         font-size: 0.78rem;
         padding: 8px 8px;
+      }}
+    }}
+    @media (max-width: 520px) {{
+      .value-full {{
+        display: none;
+      }}
+      .value-compact {{
+        display: inline;
       }}
     }}
   </style>
