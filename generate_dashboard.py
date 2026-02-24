@@ -1209,34 +1209,23 @@ def render_dashboard(
         max-height: 210px;
         overflow-y: auto;
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
       }}
       .ranking-table table {{
-        min-width: 0;
-        table-layout: fixed;
+        min-width: 640px;
+        table-layout: auto;
       }}
       .ranking-table thead th,
       .ranking-table tbody td {{
-        padding: 8px 6px;
-        font-size: 0.78rem;
-      }}
-      .ranking-table thead th:nth-child(1),
-      .ranking-table tbody td:nth-child(1) {{
-        width: 12%;
+        padding: 8px 10px;
+        font-size: 0.82rem;
+        white-space: nowrap;
       }}
       .ranking-table thead th:nth-child(2),
       .ranking-table tbody td:nth-child(2) {{
-        width: 40%;
-      }}
-      .ranking-table thead th:nth-child(3),
-      .ranking-table tbody td:nth-child(3),
-      .ranking-table thead th:nth-child(4),
-      .ranking-table tbody td:nth-child(4),
-      .ranking-table thead th:nth-child(5),
-      .ranking-table tbody td:nth-child(5) {{
-        width: 16%;
+        max-width: 240px;
       }}
       .ranking-table tbody td:nth-child(2) {{
-        white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }}
@@ -1251,10 +1240,13 @@ def render_dashboard(
       .ranking-table {{
         max-height: 190px;
       }}
+      .ranking-table table {{
+        min-width: 620px;
+      }}
       .ranking-table thead th,
       .ranking-table tbody td {{
-        font-size: 0.74rem;
-        padding: 7px 5px;
+        font-size: 0.78rem;
+        padding: 8px 8px;
       }}
     }}
   </style>
