@@ -196,6 +196,7 @@ def load_planilha(path: Path) -> pd.DataFrame:
             "PESO": "peso",
             "VALOR": "valor",
             "CLIENTE": "cliente",
+            "PLACA": "placa",
         }
     )
 
@@ -212,6 +213,16 @@ def load_planilha(path: Path) -> pd.DataFrame:
         df["cliente"] = None
     df["cliente"] = df["cliente"].apply(lambda cliente: cliente.strip() if isinstance(cliente, str) else None).fillna(
         "Cliente nao informado"
+    )
+
+    if "placa" not in df.columns:
+        df["placa"] = None
+    df["placa"] = (
+        df["placa"]
+        .apply(lambda placa: placa.strip() if isinstance(placa, str) else None)
+        .apply(lambda placa: re.sub(r"\s*-\s*$", "", placa) if isinstance(placa, str) else placa)
+        .replace("", None)
+        .fillna("Placa nao informada")
     )
 
     if "valor" not in df.columns:
@@ -377,6 +388,21 @@ def resumir_cidades(df: pd.DataFrame) -> pd.DataFrame:
         .sort_values(["valor", "entregas", "peso"], ascending=False)
         .reset_index()
         .rename(columns={"cidade": "colaborador"})
+    )
+
+
+def resumir_placas(df: pd.DataFrame) -> pd.DataFrame:
+    base = df.copy()
+    base["placa"] = base["placa"].fillna("Placa nao informada")
+    base["placa"] = base["placa"].apply(
+        lambda nome: nome.strip().upper() if isinstance(nome, str) and nome.strip() else "Placa nao informada"
+    )
+    return (
+        base.groupby("placa")[["entregas", "peso", "valor"]]
+        .sum()
+        .sort_values(["peso", "valor", "entregas"], ascending=False)
+        .reset_index()
+        .rename(columns={"placa": "colaborador"})
     )
 
 
@@ -1113,6 +1139,9 @@ def render_dashboard(
   <div id="section-clientes">
 {monthly_blocks[default_month_key]["clientes"]}
   </div>
+  <div id="section-placas">
+{monthly_blocks[default_month_key]["placas"]}
+  </div>
   <div id="section-cidades">
 {monthly_blocks[default_month_key]["cidades"]}
   </div>
@@ -1146,6 +1175,7 @@ def render_dashboard(
       motoristas: document.getElementById("section-motoristas"),
       ajudantes: document.getElementById("section-ajudantes"),
       clientes: document.getElementById("section-clientes"),
+      placas: document.getElementById("section-placas"),
       cidades: document.getElementById("section-cidades"),
       mot_cidade: document.getElementById("section-mot-cidade"),
       aj_cidade: document.getElementById("section-aj-cidade"),
@@ -1160,6 +1190,7 @@ def render_dashboard(
       targets.motoristas.innerHTML = block.motoristas;
       targets.ajudantes.innerHTML = block.ajudantes;
       targets.clientes.innerHTML = block.clientes;
+      targets.placas.innerHTML = block.placas;
       targets.cidades.innerHTML = block.cidades;
       targets.mot_cidade.innerHTML = block.mot_cidade;
       targets.aj_cidade.innerHTML = block.aj_cidade;
@@ -1229,6 +1260,7 @@ def main() -> None:
     def compute_blocks(df_subset: pd.DataFrame, label_periodo: str) -> dict[str, str]:
         mot, aj = resumir_colaboradores(df_subset)
         cli = resumir_clientes(df_subset)
+        pla = resumir_placas(df_subset)
         cid = resumir_cidades(df_subset)
         mot_cidade = ranking_motorista_por(df_subset, "cidade")
         aj_cidade = ranking_ajudante_por(df_subset, "cidade")
@@ -1242,6 +1274,7 @@ def main() -> None:
             "motoristas": build_section("Motoristas", mot, show_metrics=False, photo_map=photo_map),
             "ajudantes": build_section("Ajudantes", aj, show_metrics=False, photo_map=photo_map),
             "clientes": build_section("Clientes", cli, show_metrics=False, photo_map=photo_map, name_label="Cliente"),
+            "placas": build_section("Placas", pla, show_metrics=False, photo_map=photo_map, name_label="Placa"),
             "cidades": build_city_section(cid),
             "mot_cidade": build_dupla_section("Motoristas por cidade", mot_cidade, "Motorista — Cidade"),
             "aj_cidade": build_dupla_section("Ajudantes por cidade", aj_cidade, "Ajudante — Cidade"),
