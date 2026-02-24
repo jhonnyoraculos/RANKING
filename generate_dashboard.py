@@ -1129,50 +1129,71 @@ def render_dashboard(
     }}
     @media (max-width: 720px) {{
       body {{
-        padding: 22px 12px 40px;
+        padding: 18px 10px 34px;
+      }}
+      main {{
+        gap: 16px;
       }}
       header.page-header {{
-        padding: 18px 16px;
+        padding: 14px 12px;
       }}
       .brand-logo {{
-        height: 40px;
+        height: 34px;
       }}
       .page-meta {{
-        gap: 8px;
-        font-size: 0.86rem;
+        gap: 6px;
+        font-size: 0.8rem;
       }}
       .section-heading h2 {{
-        font-size: 1.35rem;
+        font-size: 1.2rem;
       }}
       .metrics-grid {{
         grid-template-columns: 1fr;
+        gap: 10px;
       }}
       .metric-card {{
         min-height: 0;
-        padding: 18px 16px;
+        padding: 14px 12px;
+      }}
+      .metric-title {{
+        font-size: 0.7rem;
       }}
       .metric-value {{
-        font-size: 1.55rem;
+        font-size: 1.32rem;
+      }}
+      .metric-sub {{
+        font-size: 0.82rem;
       }}
       .summary-grid {{
         grid-template-columns: 1fr;
+        gap: 10px;
       }}
       .summary-card {{
         min-height: 0;
+        padding: 14px 12px;
+      }}
+      .summary-count {{
+        font-size: 2rem;
       }}
       .podium {{
-        margin: 12px 0;
-        gap: 12px;
+        margin: 8px 0;
+        gap: 8px;
       }}
       .podium-card {{
         width: 100%;
         max-width: none;
-        padding: 18px 14px;
+        padding: 14px 10px;
       }}
       .podium-avatar,
       .podium-avatar.has-photo img {{
-        width: 76px;
-        height: 76px;
+        width: 64px;
+        height: 64px;
+      }}
+      .podium h3 {{
+        font-size: 1rem;
+      }}
+      .podium-value {{
+        font-size: 0.85rem;
       }}
       .filter-group {{
         display: grid;
@@ -1184,18 +1205,56 @@ def render_dashboard(
         margin-left: 0;
       }}
       .ranking-table {{
-        padding: 10px 8px;
-        max-height: 230px;
+        padding: 6px 6px;
+        max-height: 210px;
         overflow-y: auto;
         overflow-x: auto;
       }}
       .ranking-table table {{
-        min-width: 560px;
+        min-width: 0;
+        table-layout: fixed;
       }}
       .ranking-table thead th,
       .ranking-table tbody td {{
-        padding: 10px 10px;
-        font-size: 0.88rem;
+        padding: 8px 6px;
+        font-size: 0.78rem;
+      }}
+      .ranking-table thead th:nth-child(1),
+      .ranking-table tbody td:nth-child(1) {{
+        width: 12%;
+      }}
+      .ranking-table thead th:nth-child(2),
+      .ranking-table tbody td:nth-child(2) {{
+        width: 40%;
+      }}
+      .ranking-table thead th:nth-child(3),
+      .ranking-table tbody td:nth-child(3),
+      .ranking-table thead th:nth-child(4),
+      .ranking-table tbody td:nth-child(4),
+      .ranking-table thead th:nth-child(5),
+      .ranking-table tbody td:nth-child(5) {{
+        width: 16%;
+      }}
+      .ranking-table tbody td:nth-child(2) {{
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }}
+    }}
+    @media (max-width: 420px) {{
+      header.page-header h1 {{
+        font-size: 1.3rem;
+      }}
+      .section-heading p {{
+        font-size: 0.82rem;
+      }}
+      .ranking-table {{
+        max-height: 190px;
+      }}
+      .ranking-table thead th,
+      .ranking-table tbody td {{
+        font-size: 0.74rem;
+        padding: 7px 5px;
       }}
     }}
   </style>
