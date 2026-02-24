@@ -1183,59 +1183,19 @@ def render_dashboard(
         width: 100%;
         margin-left: 0;
       }}
-    }}
-    @media (max-width: 640px) {{
       .ranking-table {{
-        background: transparent;
-        box-shadow: none;
-        padding: 6px 0;
-        max-height: none;
-        overflow: visible;
+        padding: 10px 8px;
+        max-height: 230px;
+        overflow-y: auto;
+        overflow-x: auto;
       }}
       .ranking-table table {{
-        min-width: 0;
+        min-width: 560px;
       }}
-      .ranking-table thead {{
-        display: none;
-      }}
-      .ranking-table tbody {{
-        display: grid;
-        gap: 10px;
-      }}
-      .ranking-table tbody tr {{
-        display: block;
-        background: rgba(255, 255, 255, 0.96);
-        border-radius: 14px;
-        padding: 12px;
-        box-shadow: 0 14px 28px -22px rgba(76, 81, 191, 0.7);
-      }}
-      .ranking-table tbody tr.is-top {{
-        background: linear-gradient(90deg, rgba(108, 92, 231, 0.16), rgba(79, 70, 229, 0.05));
-      }}
+      .ranking-table thead th,
       .ranking-table tbody td {{
-        display: flex;
-        justify-content: space-between;
-        gap: 12px;
-        align-items: flex-start;
-        border-bottom: none;
-        padding: 4px 0;
-      }}
-      .ranking-table tbody td::before {{
-        content: attr(data-label);
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--text-muted);
-        font-weight: 600;
-        white-space: nowrap;
-      }}
-      .ranking-table tbody td:nth-child(3),
-      .ranking-table tbody td:nth-child(4),
-      .ranking-table tbody td:nth-child(5) {{
-        text-align: right;
-      }}
-      .ranking-table tbody tr:hover {{
-        background: rgba(255, 255, 255, 0.96);
+        padding: 10px 10px;
+        font-size: 0.88rem;
       }}
     }}
   </style>
