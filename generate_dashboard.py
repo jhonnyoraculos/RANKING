@@ -14,6 +14,10 @@ EXCEL_NAME = "DASHBOARD MAIORES ENTREGAS.xlsx"
 OUTPUT_NAME = "index.html"
 PHOTO_DIR = Path("assets") / "colaboradores"
 PHOTO_INPUT_DIR = Path("assets") / "fotos_colaboradores"
+DEFAULT_SORT_COLUMNS = ["valor", "entregas", "peso"]
+COLAB_SORT_COLUMNS = ["peso", "entregas", "valor"]
+DEFAULT_RANKING_TEXT = "Ranking baseado em valor total, entregas e peso."
+COLAB_RANKING_TEXT = "Ranking baseado em peso total e entregas. Valor exibido apenas para consulta."
 
 
 def format_number(value: float, decimals: int = 0) -> str:
@@ -244,7 +248,7 @@ def resumir_colaboradores(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
         df.dropna(subset=["motorista"])
         .groupby("motorista", dropna=True)[["entregas", "peso", "valor"]]
         .sum()
-        .sort_values(["valor", "entregas", "peso"], ascending=False)
+        .sort_values(COLAB_SORT_COLUMNS, ascending=False)
         .reset_index()
         .rename(columns={"motorista": "colaborador"})
     )
@@ -281,7 +285,7 @@ def resumir_colaboradores(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
         ajudantes = (
             ajudantes_df.groupby("colaborador")[["entregas", "peso", "valor"]]
             .sum()
-            .sort_values(["valor", "entregas", "peso"], ascending=False)
+            .sort_values(COLAB_SORT_COLUMNS, ascending=False)
             .reset_index()
         )
     else:
@@ -329,7 +333,7 @@ def ranking_motorista_por(df: pd.DataFrame, chave: str) -> pd.DataFrame:
     agrupado = (
         df.groupby([chave, "motorista"])[["entregas", "peso", "valor"]]
         .sum()
-        .sort_values(["valor", "entregas", "peso"], ascending=False)
+        .sort_values(COLAB_SORT_COLUMNS, ascending=False)
         .reset_index()
         .rename(columns={"motorista": "colaborador"})
     )
@@ -353,7 +357,7 @@ def ranking_ajudante_por(df: pd.DataFrame, chave: str) -> pd.DataFrame:
         pd.DataFrame(registros)
         .groupby(["colaborador", chave])[["entregas", "peso", "valor"]]
         .sum()
-        .sort_values(["valor", "entregas", "peso"], ascending=False)
+        .sort_values(COLAB_SORT_COLUMNS, ascending=False)
         .reset_index()
     )
     agrupado["colaborador"] = agrupado["colaborador"].apply(lambda x: str(x).strip().title())
@@ -446,8 +450,9 @@ def build_metrics(summary: pd.DataFrame, *, total_entregas: float | None = None,
     </div>"""
 
 
-def build_podium(summary: pd.DataFrame, photo_map: dict[str, str]) -> str:
-    top3 = summary.sort_values(["valor", "entregas", "peso"], ascending=False).head(3)
+def build_podium(summary: pd.DataFrame, photo_map: dict[str, str], *, sort_columns: list[str] | None = None) -> str:
+    sort_columns = sort_columns or DEFAULT_SORT_COLUMNS
+    top3 = summary.sort_values(sort_columns, ascending=False).head(3)
     if top3.empty:
         return ""
 
@@ -529,7 +534,16 @@ def build_ranking_table(summary: pd.DataFrame, *, name_label: str = "Colaborador
     </div>"""
 
 
-def build_section(title: str, summary: pd.DataFrame, *, show_metrics: bool = True, photo_map: dict[str, str], name_label: str = "Colaborador") -> str:
+def build_section(
+    title: str,
+    summary: pd.DataFrame,
+    *,
+    show_metrics: bool = True,
+    photo_map: dict[str, str],
+    name_label: str = "Colaborador",
+    sort_columns: list[str] | None = None,
+    ranking_text: str | None = None,
+) -> str:
     if summary.empty:
         return f"""  <section class="panel">
     <div class="section-heading">
@@ -538,16 +552,18 @@ def build_section(title: str, summary: pd.DataFrame, *, show_metrics: bool = Tru
     </div>
   </section>"""
 
-    ordenado = summary.sort_values(["valor", "entregas", "peso"], ascending=False)
+    sort_columns = sort_columns or DEFAULT_SORT_COLUMNS
+    ranking_text = ranking_text or DEFAULT_RANKING_TEXT
+    ordenado = summary.sort_values(sort_columns, ascending=False)
     metrics_block = build_metrics(ordenado) if show_metrics else ""
 
     return f"""  <section class="panel">
     <div class="section-heading">
       <h2>{title}</h2>
-      <p>Ranking baseado em valor total, entregas e peso.</p>
+      <p>{ranking_text}</p>
     </div>
 {metrics_block}
-{build_podium(ordenado, photo_map)}
+{build_podium(ordenado, photo_map, sort_columns=sort_columns)}
 {build_ranking_table(ordenado, name_label=name_label)}
   </section>"""
 
@@ -556,8 +572,8 @@ def build_overall_summary(motoristas: pd.DataFrame, ajudantes: pd.DataFrame, pho
     total_motoristas = motoristas["colaborador"].nunique() if not motoristas.empty else 0
     total_ajudantes = ajudantes["colaborador"].nunique() if not ajudantes.empty else 0
 
-    motoristas_ord = motoristas.sort_values(["peso", "valor", "entregas"], ascending=False)
-    ajudantes_ord = ajudantes.sort_values(["peso", "valor", "entregas"], ascending=False)
+    motoristas_ord = motoristas.sort_values(COLAB_SORT_COLUMNS, ascending=False)
+    ajudantes_ord = ajudantes.sort_values(COLAB_SORT_COLUMNS, ascending=False)
 
     top_motorista = motoristas_ord.iloc[0] if not motoristas_ord.empty else None
     top_ajudante = ajudantes_ord.iloc[0] if not ajudantes_ord.empty else None
@@ -624,7 +640,14 @@ def build_city_section(cidades: pd.DataFrame) -> str:
   </section>"""
 
 
-def build_dupla_section(titulo: str, ranking: pd.DataFrame, name_label: str) -> str:
+def build_dupla_section(
+    titulo: str,
+    ranking: pd.DataFrame,
+    name_label: str,
+    *,
+    sort_columns: list[str] | None = None,
+    ranking_text: str | None = None,
+) -> str:
     if ranking.empty:
         return f"""  <section class="panel">
     <div class="section-heading">
@@ -632,11 +655,13 @@ def build_dupla_section(titulo: str, ranking: pd.DataFrame, name_label: str) -> 
       <p>Nenhum registro encontrado.</p>
     </div>
   </section>"""
-    ordenado = ranking.sort_values(["valor", "entregas", "peso"], ascending=False)
+    sort_columns = sort_columns or COLAB_SORT_COLUMNS
+    ranking_text = ranking_text or COLAB_RANKING_TEXT
+    ordenado = ranking.sort_values(sort_columns, ascending=False)
     return f"""  <section class="panel">
     <div class="section-heading">
       <h2>{titulo}</h2>
-      <p>Ranking baseado em valor total, entregas e peso.</p>
+      <p>{ranking_text}</p>
     </div>
 {build_ranking_table(ordenado, name_label=name_label)}
   </section>"""
@@ -1271,8 +1296,22 @@ def main() -> None:
         totals_valor = df_subset["valor"].sum()
         return {
             "metrics": build_metrics(mot, total_entregas=totals_ent, total_peso=totals_peso, total_valor=totals_valor),
-            "motoristas": build_section("Motoristas", mot, show_metrics=False, photo_map=photo_map),
-            "ajudantes": build_section("Ajudantes", aj, show_metrics=False, photo_map=photo_map),
+            "motoristas": build_section(
+                "Motoristas",
+                mot,
+                show_metrics=False,
+                photo_map=photo_map,
+                sort_columns=COLAB_SORT_COLUMNS,
+                ranking_text=COLAB_RANKING_TEXT,
+            ),
+            "ajudantes": build_section(
+                "Ajudantes",
+                aj,
+                show_metrics=False,
+                photo_map=photo_map,
+                sort_columns=COLAB_SORT_COLUMNS,
+                ranking_text=COLAB_RANKING_TEXT,
+            ),
             "clientes": build_section("Clientes", cli, show_metrics=False, photo_map=photo_map, name_label="Cliente"),
             "placas": build_section("Placas", pla, show_metrics=False, photo_map=photo_map, name_label="Placa"),
             "cidades": build_city_section(cid),
