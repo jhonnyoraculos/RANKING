@@ -732,8 +732,12 @@ def render_dashboard(
       background: #ffffff;
       color: var(--text-main);
       padding: 34px 18px 56px;
+      width: 100%;
+      max-width: 100vw;
+      overflow-x: hidden;
     }}
     main {{
+      width: 100%;
       max-width: 1180px;
       margin: 0 auto;
       display: grid;
@@ -762,10 +766,13 @@ def render_dashboard(
     }}
     header.page-header h1 {{
       margin: 0;
+      flex: 1 1 320px;
+      min-width: 0;
       font-size: clamp(1.55rem, 3.6vw, 2.35rem);
       line-height: 1.18;
       color: var(--primary-dark);
       letter-spacing: -0.5px;
+      overflow-wrap: anywhere;
     }}
     header.page-header p {{
       margin: 0;
@@ -787,6 +794,7 @@ def render_dashboard(
       display: flex;
       flex-direction: column;
       gap: 24px;
+      min-width: 0;
     }}
     .section-heading {{
       display: flex;
@@ -995,6 +1003,9 @@ def render_dashboard(
       overflow-x: auto;
       max-height: 440px;
       overflow-y: auto;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
     }}
     .ranking-table table {{
       width: 100%;
