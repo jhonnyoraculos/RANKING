@@ -847,6 +847,10 @@ def render_dashboard(
       color: var(--text-muted);
       font-size: 0.95rem;
     }}
+    .page-meta span {{
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }}
     .panel {{
       background: var(--panel);
       border-radius: var(--radius-xl);
@@ -894,6 +898,7 @@ def render_dashboard(
       flex-direction: column;
       gap: 10px;
       min-height: 140px;
+      min-width: 0;
       position: relative;
       overflow: hidden;
       box-shadow: var(--shadow);
@@ -1234,6 +1239,8 @@ def render_dashboard(
         height: 34px;
       }}
       .page-meta {{
+        display: grid;
+        grid-template-columns: 1fr;
         gap: 6px;
         font-size: 0.8rem;
       }}
@@ -1301,12 +1308,13 @@ def render_dashboard(
         padding: 6px 6px;
         max-height: 210px;
         overflow-y: auto;
-        overflow-x: auto;
+        overflow-x: hidden;
         -webkit-overflow-scrolling: touch;
       }}
       .ranking-table table {{
-        min-width: 640px;
-        table-layout: auto;
+        min-width: 100%;
+        width: 100%;
+        table-layout: fixed;
       }}
       .ranking-table thead th,
       .ranking-table tbody td {{
@@ -1314,9 +1322,25 @@ def render_dashboard(
         font-size: 0.82rem;
         white-space: nowrap;
       }}
+      .ranking-table thead th:nth-child(1),
+      .ranking-table tbody td:nth-child(1) {{
+        width: 10%;
+      }}
       .ranking-table thead th:nth-child(2),
       .ranking-table tbody td:nth-child(2) {{
-        max-width: 240px;
+        width: 38%;
+      }}
+      .ranking-table thead th:nth-child(3),
+      .ranking-table tbody td:nth-child(3) {{
+        width: 14%;
+      }}
+      .ranking-table thead th:nth-child(4),
+      .ranking-table tbody td:nth-child(4) {{
+        width: 18%;
+      }}
+      .ranking-table thead th:nth-child(5),
+      .ranking-table tbody td:nth-child(5) {{
+        width: 20%;
       }}
       .ranking-table tbody td:nth-child(2) {{
         overflow: hidden;
@@ -1334,7 +1358,7 @@ def render_dashboard(
         max-height: 190px;
       }}
       .ranking-table table {{
-        min-width: 620px;
+        min-width: 100%;
       }}
       .ranking-table thead th,
       .ranking-table tbody td {{
