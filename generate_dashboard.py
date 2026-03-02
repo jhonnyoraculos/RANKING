@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +12,7 @@ import pandas as pd
 
 EXCEL_NAME = "DASHBOARD MAIORES ENTREGAS.xlsx"
 OUTPUT_NAME = "index.html"
+COLABORADORES_SHEET = "COLABORADORES"
 PHOTO_DIR = Path("assets") / "colaboradores"
 PHOTO_INPUT_DIR = Path("assets") / "fotos_colaboradores"
 DEFAULT_SORT_COLUMNS = ["valor", "entregas", "peso"]
@@ -64,6 +65,86 @@ def responsive_text(full_text: str, compact_text: str) -> str:
     if full_text == compact_text:
         return full_text
     return f'<span class="value-full">{full_text}</span><span class="value-compact">{compact_text}</span>'
+
+
+def clean_name(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    nome = " ".join(value.strip().split())
+    if not nome or nome.lower() == "nan":
+        return None
+    placeholder = normalize_key(nome)
+    if placeholder in {"sem_motorista", "sem_ajudante", "nao_informado"}:
+        return None
+    return nome
+
+
+def normalize_display_name(value: str) -> str:
+    return " ".join(parte.capitalize() for parte in value.split())
+
+
+def normalize_role(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    role_key = normalize_key(value).replace("_", " ")
+    if "motorista" in role_key:
+        return "motorista"
+    if "ajudante" in role_key:
+        return "ajudante"
+    return None
+
+
+def normalize_header(value: object) -> str:
+    header = str(value).strip().lower()
+    return re.sub(r"\.\d+$", "", header)
+
+
+def register_role(mapping: dict[str, str], nome: str, role: str) -> None:
+    key_plain = nome.lower()
+    key_slug = normalize_key(nome)
+    mapping[key_plain] = role
+    mapping[key_slug] = role
+
+
+def lookup_role(nome: str | None, role_map: dict[str, str]) -> str | None:
+    if not nome:
+        return None
+    key_plain = nome.lower()
+    key_slug = normalize_key(nome)
+    return role_map.get(key_plain) or role_map.get(key_slug)
+
+
+def load_colaboradores_roles(path: Path) -> dict[str, str]:
+    try:
+        sheet = pd.read_excel(path, sheet_name=COLABORADORES_SHEET, header=1)
+    except Exception:
+        return {}
+
+    if sheet.empty:
+        return {}
+
+    role_map: dict[str, str] = {}
+    cols = list(sheet.columns)
+    for idx, col in enumerate(cols):
+        if normalize_header(col) != "nome completo":
+            continue
+
+        cargo_idx: int | None = None
+        for pos in (idx + 1, idx + 2):
+            if pos < len(cols) and normalize_header(cols[pos]) == "cargo":
+                cargo_idx = pos
+                break
+        if cargo_idx is None:
+            continue
+
+        for _, row in sheet.iterrows():
+            nome = clean_name(row.iloc[idx])
+            role = normalize_role(row.iloc[cargo_idx])
+            if not nome or not role:
+                continue
+            register_role(role_map, nome, role)
+
+    return role_map
 
 
 def get_initials(nome: str) -> str:
@@ -265,47 +346,83 @@ def load_planilha(path: Path) -> pd.DataFrame:
     return df
 
 
-def resumir_colaboradores(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    motoristas = (
-        df.dropna(subset=["motorista"])
-        .groupby("motorista", dropna=True)[["entregas", "peso", "valor"]]
-        .sum()
-        .sort_values(COLAB_SORT_COLUMNS, ascending=False)
-        .reset_index()
-        .rename(columns={"motorista": "colaborador"})
-    )
+def dividir_colaboradores_por_linha(
+    row: pd.Series,
+    *,
+    role_map: dict[str, str] | None = None,
+    chave_extra: dict[str, object] | None = None,
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    role_map = role_map or {}
+    extras = chave_extra or {}
+    entregas = float(row.get("entregas", 0) or 0)
+    peso = float(row.get("peso", 0) or 0)
+    valor = float(row.get("valor", 0) or 0)
 
-    ajudantes_registros: list[dict[str, float]] = []
-    for _, row in df.iterrows():
-        entregas = row["entregas"]
-        peso = row["peso"]
-        valor = row["valor"]
-        nomes: list[str] = []
-        for col in ("ajudante_1", "ajudante_2"):
-            nome = row.get(col)
-            if isinstance(nome, str):
-                nome_limpo = nome.strip()
-                if nome_limpo and nome_limpo.lower() != "nan":
-                    nome_normalizado = " ".join(parte.capitalize() for parte in nome_limpo.split())
-                    nomes.append(nome_normalizado)
+    motoristas: list[str] = []
+    ajudantes: list[str] = []
+    seen: set[str] = set()
+    candidates = [("motorista", "motorista"), ("ajudante_1", "ajudante"), ("ajudante_2", "ajudante")]
 
-        if not nomes:
+    for col, default_role in candidates:
+        nome_raw = clean_name(row.get(col))
+        if not nome_raw:
             continue
+        key = normalize_key(nome_raw)
+        if key in seen:
+            continue
+        seen.add(key)
 
-        fator = 1 / len(nomes)
-        entregas_cota = entregas * fator
-        peso_cota = peso * fator
-        valor_cota = valor * fator
+        role = lookup_role(nome_raw, role_map) or default_role
+        nome = normalize_display_name(nome_raw)
+        if role == "motorista":
+            motoristas.append(nome)
+        elif role == "ajudante":
+            ajudantes.append(nome)
 
-        for nome in nomes:
-            ajudantes_registros.append(
-                {"colaborador": nome, "entregas": entregas_cota, "peso": peso_cota, "valor": valor_cota}
-            )
+    def build_records(names: list[str]) -> list[dict[str, object]]:
+        if not names:
+            return []
+        fator = 1 / len(names)
+        records: list[dict[str, object]] = []
+        for nome in names:
+            record: dict[str, object] = {
+                "colaborador": nome,
+                "entregas": entregas * fator,
+                "peso": peso * fator,
+                "valor": valor * fator,
+            }
+            record.update(extras)
+            records.append(record)
+        return records
+
+    return build_records(motoristas), build_records(ajudantes)
+
+
+def resumir_colaboradores(df: pd.DataFrame, role_map: dict[str, str] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    role_map = role_map or {}
+    motoristas_registros: list[dict[str, object]] = []
+    ajudantes_registros: list[dict[str, object]] = []
+
+    for _, row in df.iterrows():
+        mot_records, aj_records = dividir_colaboradores_por_linha(row, role_map=role_map)
+        motoristas_registros.extend(mot_records)
+        ajudantes_registros.extend(aj_records)
+
+    if motoristas_registros:
+        motoristas = (
+            pd.DataFrame(motoristas_registros)
+            .groupby("colaborador")[["entregas", "peso", "valor"]]
+            .sum()
+            .sort_values(COLAB_SORT_COLUMNS, ascending=False)
+            .reset_index()
+        )
+    else:
+        motoristas = pd.DataFrame(columns=["colaborador", "entregas", "peso", "valor"])
 
     if ajudantes_registros:
-        ajudantes_df = pd.DataFrame(ajudantes_registros)
         ajudantes = (
-            ajudantes_df.groupby("colaborador")[["entregas", "peso", "valor"]]
+            pd.DataFrame(ajudantes_registros)
+            .groupby("colaborador")[["entregas", "peso", "valor"]]
             .sum()
             .sort_values(COLAB_SORT_COLUMNS, ascending=False)
             .reset_index()
@@ -316,61 +433,32 @@ def resumir_colaboradores(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]
     return motoristas, ajudantes
 
 
-def dividir_ajudantes_por_linha(row: pd.Series, *, chave_extra: dict[str, object] | None = None) -> list[dict[str, object]]:
-    ajudantes_registros: list[dict[str, object]] = []
-    entregas = row.get("entregas", 0)
-    peso = row.get("peso", 0)
-    valor = row.get("valor", 0)
-    extras = chave_extra or {}
-    nomes: list[str] = []
-    for col in ("ajudante_1", "ajudante_2"):
-        nome = row.get(col)
-        if isinstance(nome, str):
-            nome_limpo = nome.strip()
-            if nome_limpo and nome_limpo.lower() != "nan":
-                nome_normalizado = " ".join(parte.capitalize() for parte in nome_limpo.split())
-                nomes.append(nome_normalizado)
-
-    if not nomes:
-        return ajudantes_registros
-
-    fator = 1 / len(nomes)
-    entregas_cota = entregas * fator
-    peso_cota = peso * fator
-    valor_cota = valor * fator
-
-    for nome in nomes:
-        registro = {
-            "colaborador": nome,
-            "entregas": entregas_cota,
-            "peso": peso_cota,
-            "valor": valor_cota,
-        }
-        registro.update(extras)
-        ajudantes_registros.append(registro)
-    return ajudantes_registros
+def dividir_ajudantes_por_linha(
+    row: pd.Series,
+    *,
+    role_map: dict[str, str] | None = None,
+    chave_extra: dict[str, object] | None = None,
+) -> list[dict[str, object]]:
+    _, ajudantes = dividir_colaboradores_por_linha(row, role_map=role_map, chave_extra=chave_extra)
+    return ajudantes
 
 
-def ranking_motorista_por(df: pd.DataFrame, chave: str) -> pd.DataFrame:
-    agrupado = (
-        df.groupby([chave, "motorista"])[["entregas", "peso", "valor"]]
-        .sum()
-        .sort_values(COLAB_SORT_COLUMNS, ascending=False)
-        .reset_index()
-        .rename(columns={"motorista": "colaborador"})
-    )
-    agrupado["colaborador"] = agrupado["colaborador"].fillna("Sem motorista").apply(lambda x: str(x).strip().title())
-    agrupado[chave] = agrupado[chave].fillna(f"{chave} nao informado").apply(lambda x: str(x).strip().title())
-    agrupado["colaborador"] = agrupado["colaborador"] + " — " + agrupado[chave]
-    return agrupado[["colaborador", "entregas", "peso", "valor"]]
+def dividir_motoristas_por_linha(
+    row: pd.Series,
+    *,
+    role_map: dict[str, str] | None = None,
+    chave_extra: dict[str, object] | None = None,
+) -> list[dict[str, object]]:
+    motoristas, _ = dividir_colaboradores_por_linha(row, role_map=role_map, chave_extra=chave_extra)
+    return motoristas
 
 
-def ranking_ajudante_por(df: pd.DataFrame, chave: str) -> pd.DataFrame:
+def ranking_motorista_por(df: pd.DataFrame, chave: str, role_map: dict[str, str] | None = None) -> pd.DataFrame:
     registros: list[dict[str, object]] = []
     for _, row in df.iterrows():
         chave_val = row.get(chave)
-        chave_val = chave_val.strip().title() if isinstance(chave_val, str) else f"{chave} nao informado"
-        registros.extend(dividir_ajudantes_por_linha(row, chave_extra={chave: chave_val}))
+        chave_val = chave_val.strip().title() if isinstance(chave_val, str) and chave_val.strip() else f"{chave} nao informado"
+        registros.extend(dividir_motoristas_por_linha(row, role_map=role_map, chave_extra={chave: chave_val}))
 
     if not registros:
         return pd.DataFrame(columns=["colaborador", "entregas", "peso", "valor"])
@@ -383,9 +471,29 @@ def ranking_ajudante_por(df: pd.DataFrame, chave: str) -> pd.DataFrame:
         .reset_index()
     )
     agrupado["colaborador"] = agrupado["colaborador"].apply(lambda x: str(x).strip().title())
-    agrupado["colaborador"] = agrupado["colaborador"] + " — " + agrupado[chave]
+    agrupado["colaborador"] = agrupado["colaborador"] + " - " + agrupado[chave]
     return agrupado[["colaborador", "entregas", "peso", "valor"]]
 
+def ranking_ajudante_por(df: pd.DataFrame, chave: str, role_map: dict[str, str] | None = None) -> pd.DataFrame:
+    registros: list[dict[str, object]] = []
+    for _, row in df.iterrows():
+        chave_val = row.get(chave)
+        chave_val = chave_val.strip().title() if isinstance(chave_val, str) and chave_val.strip() else f"{chave} nao informado"
+        registros.extend(dividir_ajudantes_por_linha(row, role_map=role_map, chave_extra={chave: chave_val}))
+
+    if not registros:
+        return pd.DataFrame(columns=["colaborador", "entregas", "peso", "valor"])
+
+    agrupado = (
+        pd.DataFrame(registros)
+        .groupby(["colaborador", chave])[["entregas", "peso", "valor"]]
+        .sum()
+        .sort_values(COLAB_SORT_COLUMNS, ascending=False)
+        .reset_index()
+    )
+    agrupado["colaborador"] = agrupado["colaborador"].apply(lambda x: str(x).strip().title())
+    agrupado["colaborador"] = agrupado["colaborador"] + " - " + agrupado[chave]
+    return agrupado[["colaborador", "entregas", "peso", "valor"]]
 
 def resumir_clientes(df: pd.DataFrame) -> pd.DataFrame:
     base = df.copy()
@@ -1509,7 +1617,8 @@ def main() -> None:
         raise FileNotFoundError(f"Planilha nao encontrada: {excel_path}")
 
     df = load_planilha(excel_path)
-    motoristas, ajudantes = resumir_colaboradores(df)
+    role_map = load_colaboradores_roles(excel_path)
+    motoristas, ajudantes = resumir_colaboradores(df, role_map=role_map)
     clientes = resumir_clientes(df)
     cidades = resumir_cidades(df)
     # Dados por cidade para filtro mensal
@@ -1550,14 +1659,14 @@ def main() -> None:
     monthly_blocks: dict[str, dict[str, str]] = {}
 
     def compute_blocks(df_subset: pd.DataFrame, label_periodo: str) -> dict[str, str]:
-        mot, aj = resumir_colaboradores(df_subset)
+        mot, aj = resumir_colaboradores(df_subset, role_map=role_map)
         cli = resumir_clientes(df_subset)
         pla = resumir_placas(df_subset)
         cid = resumir_cidades(df_subset)
-        mot_cidade = ranking_motorista_por(df_subset, "cidade")
-        aj_cidade = ranking_ajudante_por(df_subset, "cidade")
-        mot_cliente = ranking_motorista_por(df_subset, "cliente")
-        aj_cliente = ranking_ajudante_por(df_subset, "cliente")
+        mot_cidade = ranking_motorista_por(df_subset, "cidade", role_map=role_map)
+        aj_cidade = ranking_ajudante_por(df_subset, "cidade", role_map=role_map)
+        mot_cliente = ranking_motorista_por(df_subset, "cliente", role_map=role_map)
+        aj_cliente = ranking_ajudante_por(df_subset, "cliente", role_map=role_map)
         totals_ent = df_subset["entregas"].sum()
         totals_peso = df_subset["peso"].sum()
         totals_valor = df_subset["valor"].sum()
@@ -1582,10 +1691,10 @@ def main() -> None:
             "clientes": build_section("Clientes", cli, show_metrics=False, photo_map=photo_map, name_label="Cliente"),
             "placas": build_section("Placas", pla, show_metrics=False, photo_map=photo_map, name_label="Placa"),
             "cidades": build_city_section(cid),
-            "mot_cidade": build_dupla_section("Motoristas por cidade", mot_cidade, "Motorista — Cidade"),
-            "aj_cidade": build_dupla_section("Ajudantes por cidade", aj_cidade, "Ajudante — Cidade"),
-            "mot_cliente": build_dupla_section("Motoristas por cliente", mot_cliente, "Motorista — Cliente"),
-            "aj_cliente": build_dupla_section("Ajudantes por cliente", aj_cliente, "Ajudante — Cliente"),
+            "mot_cidade": build_dupla_section("Motoristas por cidade", mot_cidade, "Motorista â€” Cidade"),
+            "aj_cidade": build_dupla_section("Ajudantes por cidade", aj_cidade, "Ajudante â€” Cidade"),
+            "mot_cliente": build_dupla_section("Motoristas por cliente", mot_cliente, "Motorista â€” Cliente"),
+            "aj_cliente": build_dupla_section("Ajudantes por cliente", aj_cliente, "Ajudante â€” Cliente"),
             "resumo": build_overall_summary(mot, aj, photo_map),
             "periodo": label_periodo,
         }
@@ -1618,3 +1727,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
