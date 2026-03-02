@@ -830,19 +830,9 @@ def render_dashboard(
     photo_map: dict[str, str] | None = None,
 ) -> str:
     photo_map = photo_map or {}
-    periodo_texto = ""
-    if periodo is not None:
-        valores = [p for p in periodo if pd.notna(p)]
-        if valores:
-            inicio = min(valores).strftime("%d/%m/%Y")
-            fim = max(valores).strftime("%d/%m/%Y")
-            periodo_texto = f"Periodo analisado: {inicio} - {fim}"
-
-    gerado_em = datetime.now().strftime("%d/%m/%Y %H:%M")
     default_month_key = month_options[0][0] if month_options else "all"
     if default_month_key not in monthly_blocks:
         default_month_key = "all"
-    periodo_inicial = monthly_blocks.get(default_month_key, {}).get("periodo") or periodo_texto
     options_html = "\n".join(
         f'        <option value="{key}"{" selected" if key == default_month_key else ""}>{label}</option>'
         for key, label in month_options
@@ -1533,10 +1523,6 @@ def render_dashboard(
         <img class="brand-logo" src="logo-jr.png" alt="Logo JR Ferragens e Madeiras">
         <h1>Ranking Colaboradores &#8211; Maiores Entregas JR Ferragens &amp; Madeiras</h1>
       </div>
-     <div class="page-meta">
-        <span>Atualizado em: {gerado_em}</span>
-        <span id="periodo-texto">{periodo_inicial}</span>
-      </div>
     </header>
     <div class="filter-group">
       <label class="filter-label" for="global-month-filter">Filtrar por mes:</label>
@@ -1565,7 +1551,6 @@ def render_dashboard(
   (function() {{
     const data = {json.dumps(monthly_blocks, ensure_ascii=False)};
     const select = document.getElementById("global-month-filter");
-    const periodSpan = document.getElementById("periodo-texto");
     const targets = {{
       metrics: document.getElementById("panel-metrics"),
       motoristas: document.getElementById("section-motoristas"),
@@ -1579,7 +1564,6 @@ def render_dashboard(
       targets.motoristas.innerHTML = block.motoristas;
       targets.ajudantes.innerHTML = block.ajudantes;
       targets.placas.innerHTML = block.placas;
-      if (periodSpan) periodSpan.textContent = block.periodo || "";
     }}
 
     function slugify(text) {{
@@ -1620,12 +1604,6 @@ def render_dashboard(
       title.style.fontSize = "28px";
       title.style.color = "#312e81";
 
-      const period = document.createElement("p");
-      period.textContent = periodSpan ? periodSpan.textContent : "";
-      period.style.margin = "0 0 12px";
-      period.style.fontSize = "14px";
-      period.style.color = "#6b7280";
-
       const tableClone = table.cloneNode(true);
       tableClone.style.maxHeight = "none";
       tableClone.style.overflow = "visible";
@@ -1641,9 +1619,6 @@ def render_dashboard(
       }}
 
       wrapper.appendChild(title);
-      if (period.textContent) {{
-        wrapper.appendChild(period);
-      }}
       wrapper.appendChild(tableClone);
       document.body.appendChild(wrapper);
 
