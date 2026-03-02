@@ -543,13 +543,22 @@ def resumir_placas(df: pd.DataFrame) -> pd.DataFrame:
 def build_metrics(summary: pd.DataFrame, *, total_entregas: float | None = None, total_peso: float | None = None, total_valor: float | None = None) -> str:
     total_entregas = total_entregas if total_entregas is not None else summary["entregas"].sum()
     total_peso_kg = total_peso if total_peso is not None else summary["peso"].sum()
-    total_valor = total_valor if total_valor is not None else summary["valor"].sum()
+    entregas_text = responsive_text(
+        format_number(total_entregas, 0),
+        format_compact_number(total_entregas, 1),
+    )
     peso_text = responsive_text(
         f"{format_number(total_peso_kg, 3)} kg",
         f"{format_compact_number(total_peso_kg, 1)} kg",
     )
 
     metric_cards = [
+        (
+            "metric-total",
+            "Total de entregas",
+            entregas_text,
+            "Quantidade no periodo",
+        ),
         (
             "metric-primary",
             "Peso total (kg)",
@@ -596,6 +605,7 @@ def build_podium(summary: pd.DataFrame, photo_map: dict[str, str], *, sort_colum
             )
             continue
 
+        entregas = responsive_text(format_quantity(row.entregas), format_compact_number(row.entregas, 1))
         peso = responsive_text(format_number(row.peso, 2), format_compact_number(row.peso, 1))
         nome_original = str(row.colaborador).strip()
         nome = nome_original.title()
@@ -609,6 +619,7 @@ def build_podium(summary: pd.DataFrame, photo_map: dict[str, str], *, sort_colum
         <div class="podium-medal">#{position}</div>
         {avatar}
         <h3>{nome}</h3>
+        <p class="podium-value">Entregas: <strong>{entregas}</strong></p>
         <p class="podium-value">Peso total: <strong>{peso} kg</strong></p>
       </article>"""
         )
@@ -627,6 +638,7 @@ def build_ranking_table(summary: pd.DataFrame, *, name_label: str = "Colaborador
             f"""        <tr{classe}>
           <td data-label="Rank">{rank:02d}</td>
           <td data-label="{name_label}">{nome}</td>
+          <td data-label="Entregas">{responsive_text(format_quantity(row.entregas), format_compact_number(row.entregas, 1))}</td>
           <td data-label="Peso (kg)">{responsive_text(format_number(row.peso, 2), format_compact_number(row.peso, 1))}</td>
         </tr>"""
         )
@@ -638,6 +650,7 @@ def build_ranking_table(summary: pd.DataFrame, *, name_label: str = "Colaborador
           <tr>
             <th data-short="RK">Rank</th>
             <th data-short="COLAB">{name_label}</th>
+            <th data-short="ENT">Entregas</th>
             <th data-short="PESO">Peso (kg)</th>
           </tr>
         </thead>
@@ -1151,7 +1164,7 @@ def render_dashboard(
     .ranking-table table {{
       width: 100%;
       border-collapse: collapse;
-      min-width: 420px;
+      min-width: 500px;
     }}
     .ranking-table thead th {{
       text-align: left;
@@ -1180,7 +1193,8 @@ def render_dashboard(
       white-space: normal;
       word-break: break-word;
     }}
-    .ranking-table tbody td:nth-child(3) {{
+    .ranking-table tbody td:nth-child(3),
+    .ranking-table tbody td:nth-child(4) {{
       text-align: right;
       font-variant-numeric: tabular-nums;
     }}
@@ -1405,16 +1419,22 @@ def render_dashboard(
       }}
       .ranking-table thead th:nth-child(2),
       .ranking-table tbody td:nth-child(2) {{
-        width: 52%;
+        width: 44%;
       }}
       .ranking-table thead th:nth-child(3),
       .ranking-table tbody td:nth-child(3) {{
-        width: 34%;
+        width: 16%;
+      }}
+      .ranking-table thead th:nth-child(4),
+      .ranking-table tbody td:nth-child(4) {{
+        width: 26%;
       }}
       .ranking-table thead th:nth-child(1),
       .ranking-table thead th:nth-child(3),
+      .ranking-table thead th:nth-child(4),
       .ranking-table tbody td:nth-child(1),
-      .ranking-table tbody td:nth-child(3) {{
+      .ranking-table tbody td:nth-child(3),
+      .ranking-table tbody td:nth-child(4) {{
         white-space: nowrap;
       }}
       .ranking-table tbody td:nth-child(2) {{
@@ -1479,6 +1499,9 @@ def render_dashboard(
 {options_html}
       </select>
     </div>
+  <section class="panel panel-metrics" id="panel-metrics">
+{monthly_blocks[default_month_key]["metrics"]}
+  </section>
   <div id="section-motoristas">
 {monthly_blocks[default_month_key]["motoristas"]}
   </div>
@@ -1498,6 +1521,7 @@ def render_dashboard(
     const select = document.getElementById("global-month-filter");
     const periodSpan = document.getElementById("periodo-texto");
     const targets = {{
+      metrics: document.getElementById("panel-metrics"),
       motoristas: document.getElementById("section-motoristas"),
       ajudantes: document.getElementById("section-ajudantes"),
       placas: document.getElementById("section-placas"),
@@ -1505,6 +1529,7 @@ def render_dashboard(
     function render(key) {{
       const block = data[key] || data["all"];
       if (!block) return;
+      targets.metrics.innerHTML = block.metrics;
       targets.motoristas.innerHTML = block.motoristas;
       targets.ajudantes.innerHTML = block.ajudantes;
       targets.placas.innerHTML = block.placas;
@@ -1566,7 +1591,10 @@ def main() -> None:
     def compute_blocks(df_subset: pd.DataFrame, label_periodo: str) -> dict[str, str]:
         mot, aj = resumir_colaboradores(df_subset, role_map=role_map)
         pla = resumir_placas(df_subset)
+        total_entregas = df_subset["entregas"].sum()
+        total_peso = df_subset["peso"].sum()
         return {
+            "metrics": build_metrics(mot, total_entregas=total_entregas, total_peso=total_peso),
             "motoristas": build_section(
                 "Motoristas",
                 mot,
