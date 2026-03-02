@@ -1210,6 +1210,10 @@ def render_dashboard(
       border-bottom: 1px solid rgba(99, 102, 241, 0.12);
       white-space: nowrap;
     }}
+    .ranking-table thead th:nth-child(3),
+    .ranking-table thead th:nth-child(4) {{
+      text-align: right;
+    }}
     .ranking-table tbody td {{
       padding: 14px 16px;
       font-size: 0.95rem;
@@ -1449,6 +1453,11 @@ def render_dashboard(
         font-weight: 700;
         letter-spacing: 0.02em;
         color: var(--text-muted);
+      }}
+      .ranking-table thead th:nth-child(3)::after,
+      .ranking-table thead th:nth-child(4)::after {{
+        display: block;
+        text-align: right;
       }}
       .ranking-table thead th:nth-child(1),
       .ranking-table tbody td:nth-child(1) {{
