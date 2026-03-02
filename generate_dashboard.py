@@ -15,10 +15,10 @@ OUTPUT_NAME = "index.html"
 COLABORADORES_SHEET = "COLABORADORES"
 PHOTO_DIR = Path("assets") / "colaboradores"
 PHOTO_INPUT_DIR = Path("assets") / "fotos_colaboradores"
-DEFAULT_SORT_COLUMNS = ["valor", "entregas", "peso"]
+DEFAULT_SORT_COLUMNS = ["peso", "entregas", "valor"]
 COLAB_SORT_COLUMNS = ["peso", "entregas", "valor"]
-DEFAULT_RANKING_TEXT = "Ranking baseado em valor total, entregas e peso."
-COLAB_RANKING_TEXT = "Ranking baseado em peso total e entregas. Valor exibido apenas para consulta."
+DEFAULT_RANKING_TEXT = "Ranking baseado em peso total e entregas."
+COLAB_RANKING_TEXT = "Ranking baseado em peso total e entregas."
 
 
 def format_number(value: float, decimals: int = 0) -> str:
@@ -544,40 +544,16 @@ def build_metrics(summary: pd.DataFrame, *, total_entregas: float | None = None,
     total_entregas = total_entregas if total_entregas is not None else summary["entregas"].sum()
     total_peso_kg = total_peso if total_peso is not None else summary["peso"].sum()
     total_valor = total_valor if total_valor is not None else summary["valor"].sum()
-    entregas_text = responsive_text(
-        format_number(total_entregas, 0),
-        format_compact_number(total_entregas, 1),
-    )
     peso_text = responsive_text(
         f"{format_number(total_peso_kg, 3)} kg",
         f"{format_compact_number(total_peso_kg, 1)} kg",
     )
-    valor_text = responsive_text(
-        f"R$ {format_number(total_valor, 2)}",
-        f"R$ {format_compact_number(total_valor, 1)}",
-    )
-    resumo_text = (
-        f"Peso: {responsive_text(format_number(total_peso_kg, 3), format_compact_number(total_peso_kg, 1))} kg "
-        f"&bull; Valor: R$ {responsive_text(format_number(total_valor, 2), format_compact_number(total_valor, 1))}"
-    )
 
     metric_cards = [
-        (
-            "metric-total",
-            "Total de entregas",
-            entregas_text,
-            resumo_text,
-        ),
         (
             "metric-primary",
             "Peso total (kg)",
             peso_text,
-            "Somatorio do periodo",
-        ),
-        (
-            "metric-success",
-            "Valor faturado (R$)",
-            valor_text,
             "Somatorio do periodo",
         ),
     ]
@@ -620,9 +596,7 @@ def build_podium(summary: pd.DataFrame, photo_map: dict[str, str], *, sort_colum
             )
             continue
 
-        entregas = responsive_text(format_quantity(row.entregas), format_compact_number(row.entregas, 1))
         peso = responsive_text(format_number(row.peso, 2), format_compact_number(row.peso, 1))
-        valor = responsive_text(format_number(row.valor, 2), format_compact_number(row.valor, 1))
         nome_original = str(row.colaborador).strip()
         nome = nome_original.title()
         photo_src = lookup_photo(nome_original, photo_map)
@@ -635,9 +609,7 @@ def build_podium(summary: pd.DataFrame, photo_map: dict[str, str], *, sort_colum
         <div class="podium-medal">#{position}</div>
         {avatar}
         <h3>{nome}</h3>
-        <p class="podium-value">Entregas: <strong>{entregas}</strong></p>
         <p class="podium-value">Peso total: <strong>{peso} kg</strong></p>
-        <p class="podium-value">Valor total: <strong>R$ {valor}</strong></p>
       </article>"""
         )
 
@@ -655,9 +627,7 @@ def build_ranking_table(summary: pd.DataFrame, *, name_label: str = "Colaborador
             f"""        <tr{classe}>
           <td data-label="Rank">{rank:02d}</td>
           <td data-label="{name_label}">{nome}</td>
-          <td data-label="Entregas">{responsive_text(format_quantity(row.entregas), format_compact_number(row.entregas, 1))}</td>
           <td data-label="Peso (kg)">{responsive_text(format_number(row.peso, 2), format_compact_number(row.peso, 1))}</td>
-          <td data-label="Valor (R$)">{responsive_text(f"R$ {format_number(row.valor, 2)}", format_compact_number(row.valor, 1))}</td>
         </tr>"""
         )
 
@@ -668,9 +638,7 @@ def build_ranking_table(summary: pd.DataFrame, *, name_label: str = "Colaborador
           <tr>
             <th data-short="RK">Rank</th>
             <th data-short="COLAB">{name_label}</th>
-            <th data-short="ENT">Entregas</th>
             <th data-short="PESO">Peso (kg)</th>
-            <th data-short="VALOR">Valor (R$)</th>
           </tr>
         </thead>
         <tbody>
@@ -840,13 +808,8 @@ def build_dupla_section(
 def render_dashboard(
     motoristas: pd.DataFrame,
     ajudantes: pd.DataFrame,
-    clientes: pd.DataFrame,
-    cidades: pd.DataFrame,
     month_options: list[tuple[str, str]],
     monthly_blocks: dict[str, dict[str, str]],
-    total_entregas: float | None = None,
-    total_peso: float | None = None,
-    total_valor: float | None = None,
     periodo: Iterable[datetime] | None = None,
     photo_map: dict[str, str] | None = None,
 ) -> str:
@@ -860,11 +823,6 @@ def render_dashboard(
             periodo_texto = f"Periodo analisado: {inicio} - {fim}"
 
     gerado_em = datetime.now().strftime("%d/%m/%Y %H:%M")
-    resumo_geral = build_overall_summary(motoristas, ajudantes, photo_map)
-
-    clientes_section = build_section("Clientes", clientes, show_metrics=False, photo_map=photo_map, name_label="Cliente")
-    cidades_section = build_city_section(cidades)
-    metric_overall = build_metrics(motoristas, total_entregas=total_entregas, total_peso=total_peso, total_valor=total_valor)
     default_month_key = month_options[0][0] if month_options else "all"
     if default_month_key not in monthly_blocks:
         default_month_key = "all"
@@ -1193,7 +1151,7 @@ def render_dashboard(
     .ranking-table table {{
       width: 100%;
       border-collapse: collapse;
-      min-width: 520px;
+      min-width: 420px;
     }}
     .ranking-table thead th {{
       text-align: left;
@@ -1222,9 +1180,7 @@ def render_dashboard(
       white-space: normal;
       word-break: break-word;
     }}
-    .ranking-table tbody td:nth-child(3),
-    .ranking-table tbody td:nth-child(4),
-    .ranking-table tbody td:nth-child(5) {{
+    .ranking-table tbody td:nth-child(3) {{
       text-align: right;
       font-variant-numeric: tabular-nums;
     }}
@@ -1428,7 +1384,6 @@ def render_dashboard(
       .ranking-table tbody td {{
         padding: 8px 10px;
         font-size: 0.82rem;
-        white-space: nowrap;
       }}
       .ranking-table thead th {{
         font-size: 0;
@@ -1446,31 +1401,28 @@ def render_dashboard(
       }}
       .ranking-table thead th:nth-child(1),
       .ranking-table tbody td:nth-child(1) {{
-        width: 9%;
+        width: 14%;
       }}
       .ranking-table thead th:nth-child(2),
       .ranking-table tbody td:nth-child(2) {{
-        width: 34%;
+        width: 52%;
       }}
       .ranking-table thead th:nth-child(3),
       .ranking-table tbody td:nth-child(3) {{
-        width: 13%;
+        width: 34%;
       }}
-      .ranking-table thead th:nth-child(4),
-      .ranking-table tbody td:nth-child(4) {{
-        width: 20%;
-      }}
-      .ranking-table thead th:nth-child(5),
-      .ranking-table tbody td:nth-child(5) {{
-        width: 24%;
+      .ranking-table thead th:nth-child(1),
+      .ranking-table thead th:nth-child(3),
+      .ranking-table tbody td:nth-child(1),
+      .ranking-table tbody td:nth-child(3) {{
+        white-space: nowrap;
       }}
       .ranking-table tbody td:nth-child(2) {{
+        white-space: normal;
+        word-break: break-word;
         overflow: hidden;
         text-overflow: ellipsis;
-      }}
-      .ranking-table tbody td:nth-child(5) {{
-        overflow: hidden;
-        text-overflow: ellipsis;
+        line-height: 1.25;
       }}
     }}
     @media (max-width: 420px) {{
@@ -1527,76 +1479,35 @@ def render_dashboard(
 {options_html}
       </select>
     </div>
-  <section class="panel panel-metrics" id="panel-metrics">
-{monthly_blocks[default_month_key]["metrics"]}
-  </section>
   <div id="section-motoristas">
 {monthly_blocks[default_month_key]["motoristas"]}
   </div>
   <div id="section-ajudantes">
 {monthly_blocks[default_month_key]["ajudantes"]}
   </div>
-  <div id="section-clientes">
-{monthly_blocks[default_month_key]["clientes"]}
-  </div>
   <div id="section-placas">
 {monthly_blocks[default_month_key]["placas"]}
-  </div>
-  <div id="section-cidades">
-{monthly_blocks[default_month_key]["cidades"]}
-  </div>
-  <div id="section-mot-cidade">
-{monthly_blocks[default_month_key]["mot_cidade"]}
-  </div>
-  <div id="section-aj-cidade">
-{monthly_blocks[default_month_key]["aj_cidade"]}
-  </div>
-  <div id="section-mot-cliente">
-{monthly_blocks[default_month_key]["mot_cliente"]}
-  </div>
-  <div id="section-aj-cliente">
-{monthly_blocks[default_month_key]["aj_cliente"]}
-  </div>
-  <div id="section-resumo">
-{monthly_blocks[default_month_key]["resumo"]}
   </div>
     <footer>
       Dashboard gerado automaticamente a partir da planilha "{EXCEL_NAME}".
     </footer>
   </main>
-</body>
 <script>
   (function() {{
     const data = {json.dumps(monthly_blocks, ensure_ascii=False)};
     const select = document.getElementById("global-month-filter");
     const periodSpan = document.getElementById("periodo-texto");
     const targets = {{
-      metrics: document.getElementById("panel-metrics"),
       motoristas: document.getElementById("section-motoristas"),
       ajudantes: document.getElementById("section-ajudantes"),
-      clientes: document.getElementById("section-clientes"),
       placas: document.getElementById("section-placas"),
-      cidades: document.getElementById("section-cidades"),
-      mot_cidade: document.getElementById("section-mot-cidade"),
-      aj_cidade: document.getElementById("section-aj-cidade"),
-      mot_cliente: document.getElementById("section-mot-cliente"),
-      aj_cliente: document.getElementById("section-aj-cliente"),
-      resumo: document.getElementById("section-resumo"),
     }};
     function render(key) {{
       const block = data[key] || data["all"];
       if (!block) return;
-      targets.metrics.innerHTML = block.metrics;
       targets.motoristas.innerHTML = block.motoristas;
       targets.ajudantes.innerHTML = block.ajudantes;
-      targets.clientes.innerHTML = block.clientes;
       targets.placas.innerHTML = block.placas;
-      targets.cidades.innerHTML = block.cidades;
-      targets.mot_cidade.innerHTML = block.mot_cidade;
-      targets.aj_cidade.innerHTML = block.aj_cidade;
-      targets.mot_cliente.innerHTML = block.mot_cliente;
-      targets.aj_cliente.innerHTML = block.aj_cliente;
-      targets.resumo.innerHTML = block.resumo;
       if (periodSpan) periodSpan.textContent = block.periodo || "";
     }}
     if (select) {{
@@ -1619,8 +1530,6 @@ def main() -> None:
     df = load_planilha(excel_path)
     role_map = load_colaboradores_roles(excel_path)
     motoristas, ajudantes = resumir_colaboradores(df, role_map=role_map)
-    clientes = resumir_clientes(df)
-    cidades = resumir_cidades(df)
     # Dados por cidade para filtro mensal
     city_rows: list[dict[str, object]] = []
     month_keys: dict[str, str] = {}
@@ -1646,10 +1555,6 @@ def main() -> None:
     local_photos = load_local_photos(base_path / PHOTO_INPUT_DIR)
     excel_photos = collect_photos(excel_path)
     photo_map = {**excel_photos, **local_photos}
-    total_entregas = df["entregas"].sum()
-    total_peso = df["peso"].sum()
-    total_valor = df["valor"].sum()
-
     def period_text(subset: pd.DataFrame) -> str:
         valores = [p for p in subset["data"] if pd.notna(p)]
         if not valores:
@@ -1660,18 +1565,8 @@ def main() -> None:
 
     def compute_blocks(df_subset: pd.DataFrame, label_periodo: str) -> dict[str, str]:
         mot, aj = resumir_colaboradores(df_subset, role_map=role_map)
-        cli = resumir_clientes(df_subset)
         pla = resumir_placas(df_subset)
-        cid = resumir_cidades(df_subset)
-        mot_cidade = ranking_motorista_por(df_subset, "cidade", role_map=role_map)
-        aj_cidade = ranking_ajudante_por(df_subset, "cidade", role_map=role_map)
-        mot_cliente = ranking_motorista_por(df_subset, "cliente", role_map=role_map)
-        aj_cliente = ranking_ajudante_por(df_subset, "cliente", role_map=role_map)
-        totals_ent = df_subset["entregas"].sum()
-        totals_peso = df_subset["peso"].sum()
-        totals_valor = df_subset["valor"].sum()
         return {
-            "metrics": build_metrics(mot, total_entregas=totals_ent, total_peso=totals_peso, total_valor=totals_valor),
             "motoristas": build_section(
                 "Motoristas",
                 mot,
@@ -1688,14 +1583,15 @@ def main() -> None:
                 sort_columns=COLAB_SORT_COLUMNS,
                 ranking_text=COLAB_RANKING_TEXT,
             ),
-            "clientes": build_section("Clientes", cli, show_metrics=False, photo_map=photo_map, name_label="Cliente"),
-            "placas": build_section("Placas", pla, show_metrics=False, photo_map=photo_map, name_label="Placa"),
-            "cidades": build_city_section(cid),
-            "mot_cidade": build_dupla_section("Motoristas por cidade", mot_cidade, "Motorista â€” Cidade"),
-            "aj_cidade": build_dupla_section("Ajudantes por cidade", aj_cidade, "Ajudante â€” Cidade"),
-            "mot_cliente": build_dupla_section("Motoristas por cliente", mot_cliente, "Motorista â€” Cliente"),
-            "aj_cliente": build_dupla_section("Ajudantes por cliente", aj_cliente, "Ajudante â€” Cliente"),
-            "resumo": build_overall_summary(mot, aj, photo_map),
+            "placas": build_section(
+                "Placas",
+                pla,
+                show_metrics=False,
+                photo_map=photo_map,
+                name_label="Placa",
+                sort_columns=COLAB_SORT_COLUMNS,
+                ranking_text=COLAB_RANKING_TEXT,
+            ),
             "periodo": label_periodo,
         }
 
@@ -1710,13 +1606,8 @@ def main() -> None:
     html = render_dashboard(
         motoristas,
         ajudantes,
-        clientes,
-        cidades,
         month_options,
         monthly_blocks,
-        total_entregas,
-        total_peso,
-        total_valor,
         df["data"].dropna().tolist(),
         photo_map,
     )
