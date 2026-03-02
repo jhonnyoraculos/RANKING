@@ -686,7 +686,10 @@ def build_section(
 
     return f"""  <section class="panel">
     <div class="section-heading">
-      <h2>{title}</h2>
+      <div class="section-heading-top">
+        <h2>{title}</h2>
+        <button class="export-image-btn" type="button" data-export-label="{title}">Gerar imagem da lista</button>
+      </div>
       <p>{ranking_text}</p>
     </div>
 {metrics_block}
@@ -851,6 +854,7 @@ def render_dashboard(
   <meta charset="UTF-8">
   <title>Ranking Colaboradores &#8211; Maiores Entregas JR Ferragens &amp; Madeiras</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <style>
     :root {{
       color-scheme: light;
@@ -946,6 +950,13 @@ def render_dashboard(
       flex-direction: column;
       gap: 6px;
     }}
+    .section-heading-top {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }}
     .section-heading h2 {{
       margin: 0;
       font-size: 1.65rem;
@@ -955,6 +966,29 @@ def render_dashboard(
       margin: 0;
       color: var(--text-muted);
       font-size: 0.95rem;
+    }}
+    .export-image-btn {{
+      border: 1px solid rgba(79, 70, 229, 0.24);
+      background: linear-gradient(135deg, #ffffff, #eef2ff);
+      color: #312e81;
+      border-radius: 12px;
+      padding: 8px 12px;
+      font-size: 0.86rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      box-shadow: 0 8px 18px -14px rgba(79, 70, 229, 0.75);
+      white-space: nowrap;
+    }}
+    .export-image-btn:hover {{
+      transform: translateY(-1px);
+      box-shadow: 0 10px 22px -14px rgba(79, 70, 229, 0.9);
+    }}
+    .export-image-btn:disabled {{
+      opacity: 0.7;
+      cursor: wait;
+      transform: none;
+      box-shadow: none;
     }}
     .value-compact {{
       display: none;
@@ -1325,6 +1359,9 @@ def render_dashboard(
       .section-heading h2 {{
         font-size: 1.2rem;
       }}
+      .export-image-btn {{
+        width: 100%;
+      }}
       .metrics-grid {{
         grid-template-columns: 1fr;
         gap: 10px;
@@ -1535,6 +1572,104 @@ def render_dashboard(
       targets.placas.innerHTML = block.placas;
       if (periodSpan) periodSpan.textContent = block.periodo || "";
     }}
+
+    function slugify(text) {{
+      return (text || "ranking")
+        .toString()
+        .normalize("NFD")
+        .replace(/[^\w\s-]/g, "")
+        .trim()
+        .replace(/\s+/g, "-")
+        .toLowerCase();
+    }}
+
+    async function exportRankingImage(button) {{
+      if (typeof html2canvas !== "function") {{
+        alert("Nao foi possivel gerar imagem agora.");
+        return;
+      }}
+      const panel = button.closest(".panel");
+      const table = panel ? panel.querySelector(".ranking-table") : null;
+      if (!panel || !table) {{
+        alert("Lista de ranking nao encontrada.");
+        return;
+      }}
+
+      const wrapper = document.createElement("div");
+      wrapper.style.position = "fixed";
+      wrapper.style.left = "-99999px";
+      wrapper.style.top = "0";
+      wrapper.style.background = "#ffffff";
+      wrapper.style.padding = "18px";
+      wrapper.style.boxSizing = "border-box";
+      wrapper.style.width = `${{Math.max(760, Math.min(1400, table.scrollWidth + 40))}}px`;
+      wrapper.style.fontFamily = '"Poppins", "Segoe UI", Arial, sans-serif';
+
+      const title = document.createElement("h2");
+      title.textContent = button.getAttribute("data-export-label") || "Ranking";
+      title.style.margin = "0 0 6px";
+      title.style.fontSize = "28px";
+      title.style.color = "#312e81";
+
+      const period = document.createElement("p");
+      period.textContent = periodSpan ? periodSpan.textContent : "";
+      period.style.margin = "0 0 12px";
+      period.style.fontSize = "14px";
+      period.style.color = "#6b7280";
+
+      const tableClone = table.cloneNode(true);
+      tableClone.style.maxHeight = "none";
+      tableClone.style.overflow = "visible";
+      tableClone.style.boxShadow = "none";
+      tableClone.style.borderRadius = "14px";
+      tableClone.style.padding = "10px 12px";
+
+      const tableElement = tableClone.querySelector("table");
+      if (tableElement) {{
+        tableElement.style.width = "100%";
+        tableElement.style.minWidth = "0";
+        tableElement.style.tableLayout = "auto";
+      }}
+
+      wrapper.appendChild(title);
+      if (period.textContent) {{
+        wrapper.appendChild(period);
+      }}
+      wrapper.appendChild(tableClone);
+      document.body.appendChild(wrapper);
+
+      const canvas = await html2canvas(wrapper, {{
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+      }});
+      wrapper.remove();
+
+      const monthLabel = select ? select.options[select.selectedIndex].textContent : "todos";
+      const fileName = `${{slugify(title.textContent)}}-${{slugify(monthLabel)}}.png`;
+      const link = document.createElement("a");
+      link.href = canvas.toDataURL("image/png");
+      link.download = fileName;
+      link.click();
+    }}
+
+    document.addEventListener("click", (event) => {{
+      const button = event.target.closest(".export-image-btn");
+      if (!button) return;
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "Gerando...";
+      exportRankingImage(button)
+        .catch((error) => {{
+          console.error(error);
+          alert("Nao foi possivel gerar a imagem da lista.");
+        }})
+        .finally(() => {{
+          button.disabled = false;
+          button.textContent = original;
+        }});
+    }});
+
     if (select) {{
       select.addEventListener("change", () => render(select.value));
     }}
