@@ -814,7 +814,10 @@ def build_dupla_section(
     ordenado = ranking.sort_values(sort_columns, ascending=False)
     return f"""  <section class="panel">
     <div class="section-heading">
-      <h2>{titulo}</h2>
+      <div class="section-heading-top">
+        <h2>{titulo}</h2>
+        <button class="export-image-btn" type="button" data-export-label="{titulo}">Gerar imagem da lista</button>
+      </div>
       <p>{ranking_text}</p>
     </div>
 {build_ranking_table(ordenado, name_label=name_label)}
@@ -1543,6 +1546,24 @@ def render_dashboard(
   <div id="section-placas">
 {monthly_blocks[default_month_key]["placas"]}
   </div>
+  <div id="section-clientes">
+{monthly_blocks[default_month_key]["clientes"]}
+  </div>
+  <div id="section-cidades">
+{monthly_blocks[default_month_key]["cidades"]}
+  </div>
+  <div id="section-mot-cidade">
+{monthly_blocks[default_month_key]["mot_cidade"]}
+  </div>
+  <div id="section-aj-cidade">
+{monthly_blocks[default_month_key]["aj_cidade"]}
+  </div>
+  <div id="section-mot-cliente">
+{monthly_blocks[default_month_key]["mot_cliente"]}
+  </div>
+  <div id="section-aj-cliente">
+{monthly_blocks[default_month_key]["aj_cliente"]}
+  </div>
     <footer>
       Dashboard gerado automaticamente a partir da planilha "{EXCEL_NAME}".
     </footer>
@@ -1556,6 +1577,12 @@ def render_dashboard(
       motoristas: document.getElementById("section-motoristas"),
       ajudantes: document.getElementById("section-ajudantes"),
       placas: document.getElementById("section-placas"),
+      clientes: document.getElementById("section-clientes"),
+      cidades: document.getElementById("section-cidades"),
+      mot_cidade: document.getElementById("section-mot-cidade"),
+      aj_cidade: document.getElementById("section-aj-cidade"),
+      mot_cliente: document.getElementById("section-mot-cliente"),
+      aj_cliente: document.getElementById("section-aj-cliente"),
     }};
     function render(key) {{
       const block = data[key] || data["all"];
@@ -1564,6 +1591,12 @@ def render_dashboard(
       targets.motoristas.innerHTML = block.motoristas;
       targets.ajudantes.innerHTML = block.ajudantes;
       targets.placas.innerHTML = block.placas;
+      targets.clientes.innerHTML = block.clientes;
+      targets.cidades.innerHTML = block.cidades;
+      targets.mot_cidade.innerHTML = block.mot_cidade;
+      targets.aj_cidade.innerHTML = block.aj_cidade;
+      targets.mot_cliente.innerHTML = block.mot_cliente;
+      targets.aj_cliente.innerHTML = block.aj_cliente;
     }}
 
     function slugify(text) {{
@@ -1710,6 +1743,12 @@ def main() -> None:
     def compute_blocks(df_subset: pd.DataFrame, label_periodo: str) -> dict[str, str]:
         mot, aj = resumir_colaboradores(df_subset, role_map=role_map)
         pla = resumir_placas(df_subset)
+        cli = resumir_clientes(df_subset)
+        cid = resumir_cidades(df_subset)
+        mot_cidade = ranking_motorista_por(df_subset, "cidade", role_map=role_map)
+        aj_cidade = ranking_ajudante_por(df_subset, "cidade", role_map=role_map)
+        mot_cliente = ranking_motorista_por(df_subset, "cliente", role_map=role_map)
+        aj_cliente = ranking_ajudante_por(df_subset, "cliente", role_map=role_map)
         total_entregas = df_subset["entregas"].sum()
         total_peso = df_subset["peso"].sum()
         return {
@@ -1736,6 +1775,52 @@ def main() -> None:
                 show_metrics=False,
                 photo_map=photo_map,
                 name_label="Placa",
+                sort_columns=COLAB_SORT_COLUMNS,
+                ranking_text=COLAB_RANKING_TEXT,
+            ),
+            "clientes": build_section(
+                "Clientes",
+                cli,
+                show_metrics=False,
+                photo_map=photo_map,
+                name_label="Cliente",
+                sort_columns=COLAB_SORT_COLUMNS,
+                ranking_text=COLAB_RANKING_TEXT,
+            ),
+            "cidades": build_section(
+                "Cidades",
+                cid,
+                show_metrics=False,
+                photo_map=photo_map,
+                name_label="Cidade",
+                sort_columns=COLAB_SORT_COLUMNS,
+                ranking_text=COLAB_RANKING_TEXT,
+            ),
+            "mot_cidade": build_dupla_section(
+                "Motoristas por cidade",
+                mot_cidade,
+                "Motorista - Cidade",
+                sort_columns=COLAB_SORT_COLUMNS,
+                ranking_text=COLAB_RANKING_TEXT,
+            ),
+            "aj_cidade": build_dupla_section(
+                "Ajudantes por cidade",
+                aj_cidade,
+                "Ajudante - Cidade",
+                sort_columns=COLAB_SORT_COLUMNS,
+                ranking_text=COLAB_RANKING_TEXT,
+            ),
+            "mot_cliente": build_dupla_section(
+                "Motoristas por cliente",
+                mot_cliente,
+                "Motorista - Cliente",
+                sort_columns=COLAB_SORT_COLUMNS,
+                ranking_text=COLAB_RANKING_TEXT,
+            ),
+            "aj_cliente": build_dupla_section(
+                "Ajudantes por cliente",
+                aj_cliente,
+                "Ajudante - Cliente",
                 sort_columns=COLAB_SORT_COLUMNS,
                 ranking_text=COLAB_RANKING_TEXT,
             ),
