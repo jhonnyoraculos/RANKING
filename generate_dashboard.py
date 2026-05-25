@@ -3,6 +3,7 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
+import html
 import math
 import re
 import unicodedata
@@ -181,6 +182,41 @@ def lookup_photo(name: str | None, photo_map: dict[str, str]) -> str | None:
         if key in photo_map:
             return photo_map[key]
     return None
+
+
+def escape_attr(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def colaborador_base_name(value: str) -> str:
+    return value.split(" - ", 1)[0].strip()
+
+
+def build_collaborator_filter_options(rankings: Iterable[pd.DataFrame]) -> str:
+    names_by_key: dict[str, str] = {}
+    for ranking in rankings:
+        if ranking.empty or "colaborador" not in ranking.columns:
+            continue
+        for value in ranking["colaborador"].dropna():
+            name = str(value).strip()
+            if not name:
+                continue
+            display_name = name.title()
+            names_by_key.setdefault(normalize_key(display_name), display_name)
+
+    if not names_by_key:
+        return '<p class="collaborator-filter-empty">Nenhum colaborador</p>'
+
+    options: list[str] = []
+    for key, name in sorted(names_by_key.items(), key=lambda item: normalize_key(item[1])):
+        search_text = f"{name} {key.replace('_', ' ')}".lower()
+        options.append(
+            f"""          <label class="collaborator-option" data-search="{escape_attr(search_text)}">
+            <input class="collaborator-checkbox" type="checkbox" value="{escape_attr(key)}" checked>
+            <span>{html.escape(name)}</span>
+          </label>"""
+        )
+    return "\n".join(options)
 
 
 def collect_photos(workbook_path: Path) -> dict[str, str]:
@@ -565,16 +601,25 @@ def build_metrics(summary: pd.DataFrame, *, total_entregas: float | None = None,
             peso_text,
             "Somatorio do periodo",
         ),
+        (
+            "metric-selected",
+            "Selecionados",
+            '<span data-selected-entregas>0</span>',
+            '<span data-selected-count>0 colaboradores</span> | <span data-selected-peso>0,00 kg</span>',
+        ),
     ]
 
-    cards_html = "\n".join(
-        f"""      <article class="metric-card {css_class}">
+    metric_cards_html: list[str] = []
+    for css_class, title, value, subtitle in metric_cards:
+        extra_attrs = " hidden" if css_class == "metric-selected" else ""
+        metric_cards_html.append(
+            f"""      <article class="metric-card {css_class}"{extra_attrs}>
         <span class="metric-title">{title}</span>
         <strong class="metric-value">{value}</strong>
         <span class="metric-sub">{subtitle}</span>
       </article>"""
-        for css_class, title, value, subtitle in metric_cards
-    )
+        )
+    cards_html = "\n".join(metric_cards_html)
 
     return f"""    <div class="metrics-grid">
 {cards_html}
@@ -629,13 +674,34 @@ def build_podium(summary: pd.DataFrame, photo_map: dict[str, str], *, sort_colum
     </div>"""
 
 
-def build_ranking_table(summary: pd.DataFrame, *, name_label: str = "Colaborador") -> str:
+def build_ranking_table(
+    summary: pd.DataFrame,
+    *,
+    name_label: str = "Colaborador",
+    filterable_collaborators: bool = False,
+    photo_map: dict[str, str] | None = None,
+) -> str:
     linhas: list[str] = []
+    photo_map = photo_map or {}
     for rank, row in enumerate(summary.itertuples(index=False), start=1):
         classe = " class=\"is-top\"" if rank <= 3 else ""
-        nome = row.colaborador.title()
+        nome_original = str(row.colaborador).strip()
+        nome = nome_original.title()
+        attrs = ""
+        if filterable_collaborators:
+            colaborador_nome = colaborador_base_name(nome_original)
+            colaborador_display = colaborador_nome.title()
+            photo_src = lookup_photo(colaborador_nome, photo_map) or ""
+            attrs = (
+                f' data-colaborador-key="{escape_attr(normalize_key(colaborador_nome))}"'
+                f' data-colaborador-name="{escape_attr(colaborador_display)}"'
+                f' data-colaborador-initials="{escape_attr(get_initials(colaborador_display))}"'
+                f' data-colaborador-photo="{escape_attr(photo_src)}"'
+                f' data-entregas="{float(row.entregas):.6f}"'
+                f' data-peso="{float(row.peso):.6f}"'
+            )
         linhas.append(
-            f"""        <tr{classe}>
+            f"""        <tr{classe}{attrs}>
           <td data-label="Rank">{rank:02d}</td>
           <td data-label="{name_label}">{nome}</td>
           <td data-label="Entregas">{responsive_text(format_quantity(row.entregas), format_compact_number(row.entregas, 1))}</td>
@@ -670,9 +736,14 @@ def build_section(
     name_label: str = "Colaborador",
     sort_columns: list[str] | None = None,
     ranking_text: str | None = None,
+    filterable_collaborators: bool = False,
+    comparison_source: bool = False,
 ) -> str:
+    section_attrs = ' data-filterable-section="colaboradores"' if filterable_collaborators else ""
+    if comparison_source:
+        section_attrs += ' data-comparison-source="colaboradores"'
     if summary.empty:
-        return f"""  <section class="panel">
+        return f"""  <section class="panel"{section_attrs}>
     <div class="section-heading">
       <h2>{title}</h2>
       <p>Nenhum registro encontrado.</p>
@@ -684,7 +755,7 @@ def build_section(
     ordenado = summary.sort_values(sort_columns, ascending=False)
     metrics_block = build_metrics(ordenado) if show_metrics else ""
 
-    return f"""  <section class="panel">
+    return f"""  <section class="panel"{section_attrs}>
     <div class="section-heading">
       <div class="section-heading-top">
         <h2>{title}</h2>
@@ -694,7 +765,7 @@ def build_section(
     </div>
 {metrics_block}
 {build_podium(ordenado, photo_map, sort_columns=sort_columns)}
-{build_ranking_table(ordenado, name_label=name_label)}
+{build_ranking_table(ordenado, name_label=name_label, filterable_collaborators=filterable_collaborators, photo_map=photo_map)}
   </section>"""
 
 
@@ -801,9 +872,12 @@ def build_dupla_section(
     *,
     sort_columns: list[str] | None = None,
     ranking_text: str | None = None,
+    filterable_collaborators: bool = False,
+    photo_map: dict[str, str] | None = None,
 ) -> str:
+    section_attrs = ' data-filterable-section="colaboradores"' if filterable_collaborators else ""
     if ranking.empty:
-        return f"""  <section class="panel">
+        return f"""  <section class="panel"{section_attrs}>
     <div class="section-heading">
       <h2>{titulo}</h2>
       <p>Nenhum registro encontrado.</p>
@@ -812,7 +886,7 @@ def build_dupla_section(
     sort_columns = sort_columns or COLAB_SORT_COLUMNS
     ranking_text = ranking_text or COLAB_RANKING_TEXT
     ordenado = ranking.sort_values(sort_columns, ascending=False)
-    return f"""  <section class="panel">
+    return f"""  <section class="panel"{section_attrs}>
     <div class="section-heading">
       <div class="section-heading-top">
         <h2>{titulo}</h2>
@@ -820,7 +894,7 @@ def build_dupla_section(
       </div>
       <p>{ranking_text}</p>
     </div>
-{build_ranking_table(ordenado, name_label=name_label)}
+{build_ranking_table(ordenado, name_label=name_label, filterable_collaborators=filterable_collaborators, photo_map=photo_map)}
   </section>"""
 
 
@@ -840,6 +914,7 @@ def render_dashboard(
         f'        <option value="{key}"{" selected" if key == default_month_key else ""}>{label}</option>'
         for key, label in month_options
     )
+    collaborator_options_html = build_collaborator_filter_options([motoristas, ajudantes])
 
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -1034,6 +1109,9 @@ def render_dashboard(
     }}
     .metric-card.metric-value {{
       background: linear-gradient(135deg, #f472b6, #ec4899);
+    }}
+    .metric-card.metric-selected {{
+      background: linear-gradient(135deg, #14b8a6, #0f766e);
     }}
     .summary-grid {{
       display: grid;
@@ -1283,6 +1361,13 @@ def render_dashboard(
       padding: 0;
       margin: 0;
     }}
+    .filter-bar {{
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }}
     .filter-label {{
       font-weight: 600;
       color: var(--text-muted);
@@ -1302,7 +1387,102 @@ def render_dashboard(
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
-      margin-bottom: 10px;
+      margin-bottom: 0;
+    }}
+    .collaborator-filter {{
+      min-width: min(100%, 380px);
+      position: relative;
+    }}
+    .collaborator-filter summary {{
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      background: #ffffff;
+      color: var(--text-main);
+      box-shadow: 0 10px 24px -18px rgba(76,81,191,0.55);
+      cursor: pointer;
+      user-select: none;
+      font-weight: 600;
+    }}
+    .collaborator-filter-count {{
+      color: var(--primary-dark);
+      font-size: 0.84rem;
+      font-weight: 700;
+    }}
+    .collaborator-filter-panel {{
+      width: min(420px, calc(100vw - 36px));
+      margin-top: 8px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(99, 102, 241, 0.16);
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 18px 36px -24px rgba(76,81,191,0.55);
+      display: grid;
+      gap: 10px;
+    }}
+    .filter-search {{
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      background: #ffffff;
+      font-size: 16px;
+    }}
+    .filter-actions {{
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }}
+    .filter-action-btn {{
+      border: 1px solid rgba(79, 70, 229, 0.22);
+      background: #ffffff;
+      color: #312e81;
+      border-radius: 10px;
+      padding: 7px 10px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+    }}
+    .collaborator-options {{
+      display: grid;
+      gap: 4px;
+      max-height: 230px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }}
+    .collaborator-option {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 8px;
+      border-radius: 8px;
+      color: var(--text-main);
+      font-size: 0.9rem;
+      cursor: pointer;
+    }}
+    .collaborator-option:hover {{
+      background: rgba(243, 244, 255, 0.85);
+    }}
+    .collaborator-option[hidden] {{
+      display: none;
+    }}
+    .collaborator-option input {{
+      accent-color: var(--primary);
+    }}
+    .collaborator-filter-empty,
+    .empty-filter-message {{
+      margin: 0;
+      color: var(--text-muted);
+      font-size: 0.92rem;
+    }}
+    .empty-filter-message {{
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: rgba(243, 244, 255, 0.72);
     }}
     footer {{
       text-align: center;
@@ -1407,6 +1587,10 @@ def render_dashboard(
       .podium-value {{
         font-size: 0.85rem;
       }}
+      .filter-bar {{
+        display: grid;
+        gap: 10px;
+      }}
       .filter-group {{
         display: grid;
         gap: 6px;
@@ -1415,6 +1599,14 @@ def render_dashboard(
       .filter-select {{
         width: 100%;
         margin-left: 0;
+      }}
+      .collaborator-filter,
+      .collaborator-filter summary,
+      .collaborator-filter-panel {{
+        width: 100%;
+      }}
+      .collaborator-filter-panel {{
+        max-width: none;
       }}
       .ranking-table {{
         padding: 6px 6px;
@@ -1527,12 +1719,27 @@ def render_dashboard(
         <h1>Ranking Colaboradores &#8211; Maiores Entregas JR Ferragens &amp; Madeiras</h1>
       </div>
     </header>
-    <div class="filter-group">
-      <label class="filter-label" for="global-month-filter">Filtrar por mes:</label>
-      <select id="global-month-filter" class="filter-select">
-        <option value="all"{" selected" if default_month_key == "all" else ""}>Todos</option>
+    <div class="filter-bar">
+      <div class="filter-group">
+        <label class="filter-label" for="global-month-filter">Filtrar por mes:</label>
+        <select id="global-month-filter" class="filter-select">
+          <option value="all"{" selected" if default_month_key == "all" else ""}>Todos</option>
 {options_html}
-      </select>
+        </select>
+      </div>
+      <details class="collaborator-filter">
+        <summary>Colaboradores <span id="collaborator-filter-summary" class="collaborator-filter-count">Todos</span></summary>
+        <div class="collaborator-filter-panel">
+          <input id="collaborator-search" class="filter-search" type="search" placeholder="Buscar colaborador" autocomplete="off">
+          <div class="filter-actions">
+            <button id="collaborator-select-all" class="filter-action-btn" type="button">Todos</button>
+            <button id="collaborator-clear" class="filter-action-btn" type="button">Limpar</button>
+          </div>
+          <div class="collaborator-options">
+{collaborator_options_html}
+          </div>
+        </div>
+      </details>
     </div>
   <section class="panel panel-metrics" id="panel-metrics">
 {monthly_blocks[default_month_key]["metrics"]}
@@ -1572,6 +1779,12 @@ def render_dashboard(
   (function() {{
     const data = {json.dumps(monthly_blocks, ensure_ascii=False)};
     const select = document.getElementById("global-month-filter");
+    const collaboratorSearch = document.getElementById("collaborator-search");
+    const collaboratorSummary = document.getElementById("collaborator-filter-summary");
+    const collaboratorCheckboxes = Array.from(document.querySelectorAll(".collaborator-checkbox"));
+    const collaboratorOptions = Array.from(document.querySelectorAll(".collaborator-option"));
+    const selectAllCollaborators = document.getElementById("collaborator-select-all");
+    const clearCollaborators = document.getElementById("collaborator-clear");
     const targets = {{
       metrics: document.getElementById("panel-metrics"),
       motoristas: document.getElementById("section-motoristas"),
@@ -1584,6 +1797,188 @@ def render_dashboard(
       mot_cliente: document.getElementById("section-mot-cliente"),
       aj_cliente: document.getElementById("section-aj-cliente"),
     }};
+    function formatRank(index) {{
+      return String(index + 1).padStart(2, "0");
+    }}
+
+    function getSelectedCollaborators() {{
+      return new Set(collaboratorCheckboxes.filter((input) => input.checked).map((input) => input.value));
+    }}
+
+    function refreshCollaboratorSummary(selectedCount) {{
+      if (!collaboratorSummary) return;
+      if (!collaboratorCheckboxes.length || selectedCount === collaboratorCheckboxes.length) {{
+        collaboratorSummary.textContent = "Todos";
+        return;
+      }}
+      collaboratorSummary.textContent = `${{selectedCount}} selecionado${{selectedCount === 1 ? "" : "s"}}`;
+    }}
+
+    function formatNumber(value, decimals) {{
+      return Number(value || 0).toLocaleString("pt-BR", {{
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      }});
+    }}
+
+    function formatQuantityValue(value) {{
+      const number = Number(value || 0);
+      return formatNumber(number, Number.isInteger(number) ? 0 : 1);
+    }}
+
+    function updateSelectedMetric(selected) {{
+      let totalEntregas = 0;
+      let totalPeso = 0;
+      const selectedInPeriod = new Set();
+      document.querySelectorAll('[data-comparison-source="colaboradores"] tbody tr[data-colaborador-key]').forEach((row) => {{
+        if (!selected.has(row.dataset.colaboradorKey)) return;
+        totalEntregas += Number(row.dataset.entregas || 0);
+        totalPeso += Number(row.dataset.peso || 0);
+        selectedInPeriod.add(row.dataset.colaboradorKey);
+      }});
+
+      document.querySelectorAll("[data-selected-entregas]").forEach((element) => {{
+        element.textContent = formatQuantityValue(totalEntregas);
+      }});
+      document.querySelectorAll("[data-selected-peso]").forEach((element) => {{
+        element.textContent = `${{formatNumber(totalPeso, 2)}} kg`;
+      }});
+      document.querySelectorAll("[data-selected-count]").forEach((element) => {{
+        const count = selectedInPeriod.size;
+        element.textContent = `${{count}} colaborador${{count === 1 ? "" : "es"}}`;
+      }});
+      document.querySelectorAll(".metric-card.metric-selected").forEach((card) => {{
+        const shouldShow = collaboratorCheckboxes.length > 0 && selected.size < collaboratorCheckboxes.length;
+        card.hidden = !shouldShow;
+      }});
+    }}
+
+    function createEmptyPodiumCard(slot) {{
+      const card = document.createElement("article");
+      card.className = slot.className + " podium-empty";
+      const placeholder = document.createElement("div");
+      placeholder.className = "podium-placeholder";
+      placeholder.textContent = "Disponivel";
+      card.appendChild(placeholder);
+      return card;
+    }}
+
+    function createPodiumCard(row, slot) {{
+      const card = document.createElement("article");
+      card.className = slot.className;
+
+      const medal = document.createElement("div");
+      medal.className = "podium-medal";
+      medal.textContent = "#" + slot.rank;
+      card.appendChild(medal);
+
+      const avatar = document.createElement("div");
+      const photo = row.dataset.colaboradorPhoto || "";
+      const name = row.dataset.colaboradorName || "";
+      if (photo) {{
+        avatar.className = "podium-avatar has-photo";
+        const image = document.createElement("img");
+        image.src = photo;
+        image.alt = name;
+        avatar.appendChild(image);
+      }} else {{
+        avatar.className = "podium-avatar";
+        avatar.textContent = row.dataset.colaboradorInitials || "--";
+      }}
+      card.appendChild(avatar);
+
+      const title = document.createElement("h3");
+      title.textContent = name;
+      card.appendChild(title);
+
+      const entregas = document.createElement("p");
+      entregas.className = "podium-value";
+      entregas.innerHTML = "Entregas: <strong>" + row.children[2].innerHTML + "</strong>";
+      card.appendChild(entregas);
+
+      const peso = document.createElement("p");
+      peso.className = "podium-value";
+      peso.innerHTML = "Peso total: <strong>" + row.children[3].innerHTML + " kg</strong>";
+      card.appendChild(peso);
+
+      return card;
+    }}
+
+    function updatePodium(section, visibleRows) {{
+      const podium = section.querySelector(".podium");
+      if (!podium) return;
+      podium.innerHTML = "";
+      podium.hidden = visibleRows.length === 0;
+      if (!visibleRows.length) return;
+      [
+        {{ rank: 2, className: "podium-card podium-second" }},
+        {{ rank: 1, className: "podium-card podium-first" }},
+        {{ rank: 3, className: "podium-card podium-third" }},
+      ].forEach((slot) => {{
+        const row = visibleRows[slot.rank - 1];
+        podium.appendChild(row ? createPodiumCard(row, slot) : createEmptyPodiumCard(slot));
+      }});
+    }}
+
+    function updateEmptyMessage(section, hasVisibleRows) {{
+      let message = section.querySelector(".empty-filter-message");
+      if (!message) {{
+        message = document.createElement("div");
+        message.className = "empty-filter-message";
+        message.textContent = "Nenhum colaborador selecionado.";
+        const table = section.querySelector(".ranking-table");
+        if (table) {{
+          table.insertAdjacentElement("afterend", message);
+        }} else {{
+          section.appendChild(message);
+        }}
+      }}
+      message.hidden = hasVisibleRows;
+    }}
+
+    function applyCollaboratorFilter() {{
+      if (!collaboratorCheckboxes.length) return;
+      const selected = getSelectedCollaborators();
+      refreshCollaboratorSummary(selected.size);
+      updateSelectedMetric(selected);
+      document.querySelectorAll('[data-filterable-section="colaboradores"]').forEach((section) => {{
+        const rows = Array.from(section.querySelectorAll("tbody tr[data-colaborador-key]"));
+        if (!rows.length) return;
+        const visibleRows = [];
+        rows.forEach((row) => {{
+          const shouldShow = selected.has(row.dataset.colaboradorKey);
+          row.hidden = !shouldShow;
+          row.classList.remove("is-top");
+          if (shouldShow) visibleRows.push(row);
+        }});
+        visibleRows.forEach((row, index) => {{
+          const rankCell = row.querySelector("td:first-child");
+          if (rankCell) rankCell.textContent = formatRank(index);
+          row.classList.toggle("is-top", index < 3);
+        }});
+        updatePodium(section, visibleRows.slice(0, 3));
+        updateEmptyMessage(section, visibleRows.length > 0);
+      }});
+    }}
+
+    function normalizeSearch(value) {{
+      return (value || "")
+        .toString()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+    }}
+
+    function applyCollaboratorSearch() {{
+      if (!collaboratorSearch) return;
+      const term = normalizeSearch(collaboratorSearch.value);
+      collaboratorOptions.forEach((option) => {{
+        const search = normalizeSearch(option.dataset.search || option.textContent);
+        option.hidden = Boolean(term) && !search.includes(term);
+      }});
+    }}
+
     function render(key) {{
       const block = data[key] || data["all"];
       if (!block) return;
@@ -1597,15 +1992,16 @@ def render_dashboard(
       targets.aj_cidade.innerHTML = block.aj_cidade;
       targets.mot_cliente.innerHTML = block.mot_cliente;
       targets.aj_cliente.innerHTML = block.aj_cliente;
+      applyCollaboratorFilter();
     }}
 
     function slugify(text) {{
       return (text || "ranking")
         .toString()
         .normalize("NFD")
-        .replace(/[^\w\s-]/g, "")
+        .replace(/[^\\w\\s-]/g, "")
         .trim()
-        .replace(/\s+/g, "-")
+        .replace(/\\s+/g, "-")
         .toLowerCase();
     }}
 
@@ -1687,9 +2083,33 @@ def render_dashboard(
         }});
     }});
 
+    collaboratorCheckboxes.forEach((input) => {{
+      input.addEventListener("change", applyCollaboratorFilter);
+    }});
+    if (collaboratorSearch) {{
+      collaboratorSearch.addEventListener("input", applyCollaboratorSearch);
+    }}
+    if (selectAllCollaborators) {{
+      selectAllCollaborators.addEventListener("click", () => {{
+        collaboratorCheckboxes.forEach((input) => {{
+          input.checked = true;
+        }});
+        applyCollaboratorFilter();
+      }});
+    }}
+    if (clearCollaborators) {{
+      clearCollaborators.addEventListener("click", () => {{
+        collaboratorCheckboxes.forEach((input) => {{
+          input.checked = false;
+        }});
+        applyCollaboratorFilter();
+      }});
+    }}
+
     if (select) {{
       select.addEventListener("change", () => render(select.value));
     }}
+    applyCollaboratorSearch();
     render(select ? select.value : "all");
   }})();
 </script>
@@ -1760,6 +2180,8 @@ def main() -> None:
                 photo_map=photo_map,
                 sort_columns=COLAB_SORT_COLUMNS,
                 ranking_text=COLAB_RANKING_TEXT,
+                filterable_collaborators=True,
+                comparison_source=True,
             ),
             "ajudantes": build_section(
                 "Ajudantes",
@@ -1768,6 +2190,8 @@ def main() -> None:
                 photo_map=photo_map,
                 sort_columns=COLAB_SORT_COLUMNS,
                 ranking_text=COLAB_RANKING_TEXT,
+                filterable_collaborators=True,
+                comparison_source=True,
             ),
             "placas": build_section(
                 "Placas",
@@ -1802,6 +2226,8 @@ def main() -> None:
                 "Motorista - Cidade",
                 sort_columns=COLAB_SORT_COLUMNS,
                 ranking_text=COLAB_RANKING_TEXT,
+                filterable_collaborators=True,
+                photo_map=photo_map,
             ),
             "aj_cidade": build_dupla_section(
                 "Ajudantes por cidade",
@@ -1809,6 +2235,8 @@ def main() -> None:
                 "Ajudante - Cidade",
                 sort_columns=COLAB_SORT_COLUMNS,
                 ranking_text=COLAB_RANKING_TEXT,
+                filterable_collaborators=True,
+                photo_map=photo_map,
             ),
             "mot_cliente": build_dupla_section(
                 "Motoristas por cliente",
@@ -1816,6 +2244,8 @@ def main() -> None:
                 "Motorista - Cliente",
                 sort_columns=COLAB_SORT_COLUMNS,
                 ranking_text=COLAB_RANKING_TEXT,
+                filterable_collaborators=True,
+                photo_map=photo_map,
             ),
             "aj_cliente": build_dupla_section(
                 "Ajudantes por cliente",
@@ -1823,6 +2253,8 @@ def main() -> None:
                 "Ajudante - Cliente",
                 sort_columns=COLAB_SORT_COLUMNS,
                 ranking_text=COLAB_RANKING_TEXT,
+                filterable_collaborators=True,
+                photo_map=photo_map,
             ),
             "periodo": label_periodo,
         }
