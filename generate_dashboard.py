@@ -954,11 +954,46 @@ def build_dupla_section(
   </section>"""
 
 
+def build_filter_records(df_subset: pd.DataFrame, role_map: dict[str, str]) -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
+    for _, row in df_subset.iterrows():
+        cidade = str(row.get("cidade", "") or "").strip().title() or "Cidade Nao Informada"
+        cliente = str(row.get("cliente", "") or "").strip().title() or "Cliente Nao Informado"
+        placa = clean_plate(row.get("placa")) or "Placa nao informada"
+        mot_records, aj_records = dividir_colaboradores_por_linha(
+            row,
+            role_map=role_map,
+            chave_extra={
+                "cidade": cidade,
+                "cliente": cliente,
+                "placa": placa,
+            },
+        )
+        for record in mot_records + aj_records:
+            colaborador = str(record.get("colaborador", "")).strip()
+            if not colaborador:
+                continue
+            records.append(
+                {
+                    "key": normalize_key(colaborador),
+                    "name": colaborador,
+                    "cidade": record["cidade"],
+                    "cliente": record["cliente"],
+                    "placa": record["placa"],
+                    "entregas": float(record.get("entregas", 0) or 0),
+                    "peso": float(record.get("peso", 0) or 0),
+                    "valor": float(record.get("valor", 0) or 0),
+                }
+            )
+    return records
+
+
 def render_dashboard(
     motoristas: pd.DataFrame,
     ajudantes: pd.DataFrame,
     month_options: list[tuple[str, str]],
     monthly_blocks: dict[str, dict[str, str]],
+    monthly_filter_records: dict[str, list[dict[str, object]]],
     periodo: Iterable[datetime] | None = None,
     photo_map: dict[str, str] | None = None,
 ) -> str:
@@ -1834,6 +1869,7 @@ def render_dashboard(
 <script>
   (function() {{
     const data = {json.dumps(monthly_blocks, ensure_ascii=False)};
+    const filterData = {json.dumps(monthly_filter_records, ensure_ascii=False)};
     const select = document.getElementById("global-month-filter");
     const collaboratorSearch = document.getElementById("collaborator-search");
     const collaboratorSummary = document.getElementById("collaborator-filter-summary");
@@ -1894,6 +1930,140 @@ def render_dashboard(
       return `${{formatNumber(number, 2)}} kg`;
     }}
 
+    function escapeHtml(value) {{
+      return (value || "").toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }}
+
+    function getInitials(name) {{
+      const parts = (name || "").trim().split(/\\s+/).filter(Boolean);
+      if (!parts.length) return "--";
+      if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+      return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    }}
+
+    function currentBlock() {{
+      const key = select ? select.value : "all";
+      return data[key] || data["all"];
+    }}
+
+    function currentFilterRows() {{
+      const key = select ? select.value : "all";
+      return filterData[key] || filterData["all"] || [];
+    }}
+
+    function isFilteredSelection(selected) {{
+      return collaboratorCheckboxes.length > 0 && selected.size < collaboratorCheckboxes.length;
+    }}
+
+    function aggregateSelectedRows(selected, field) {{
+      const groups = new Map();
+      currentFilterRows().forEach((record) => {{
+        if (!selected.has(record.key)) return;
+        const name = record[field] || "Nao informado";
+        if (!groups.has(name)) {{
+          groups.set(name, {{ nome: name, entregas: 0, peso: 0, valor: 0 }});
+        }}
+        const group = groups.get(name);
+        group.entregas += Number(record.entregas || 0);
+        group.peso += Number(record.peso || 0);
+        group.valor += Number(record.valor || 0);
+      }});
+      return Array.from(groups.values()).sort((a, b) =>
+        (b.peso - a.peso) || (b.entregas - a.entregas) || (b.valor - a.valor)
+      );
+    }}
+
+    function buildPodiumHtml(rows) {{
+      if (!rows.length) return "";
+      const slots = [
+        {{ rank: 2, className: "podium-card podium-second" }},
+        {{ rank: 1, className: "podium-card podium-first" }},
+        {{ rank: 3, className: "podium-card podium-third" }},
+      ];
+      const cards = slots.map((slot) => {{
+        const row = rows[slot.rank - 1];
+        if (!row) {{
+          return `<article class="${{slot.className}} podium-empty"><div class="podium-placeholder">Disponivel</div></article>`;
+        }}
+        const nome = escapeHtml(row.nome);
+        return `<article class="${{slot.className}}">
+        <div class="podium-medal">#${{slot.rank}}</div>
+        <div class="podium-avatar">${{escapeHtml(getInitials(row.nome))}}</div>
+        <h3>${{nome}}</h3>
+        <p class="podium-value">Entregas: <strong>${{formatQuantityValue(row.entregas)}}</strong></p>
+        <p class="podium-value">Peso total: <strong>${{formatWeight(row.peso)}}</strong></p>
+      </article>`;
+      }}).join("");
+      return `<div class="podium">${{cards}}</div>`;
+    }}
+
+    function buildRankingRowsHtml(rows, nameLabel) {{
+      return rows.map((row, index) => {{
+        const topClass = index < 3 ? ' class="is-top"' : "";
+        return `<tr${{topClass}}>
+          <td data-label="Rank">${{formatRank(index)}}</td>
+          <td data-label="${{escapeHtml(nameLabel)}}">${{escapeHtml(row.nome)}}</td>
+          <td data-label="Entregas">${{formatQuantityValue(row.entregas)}}</td>
+          <td data-label="Peso">${{formatWeight(row.peso)}}</td>
+        </tr>`;
+      }}).join("");
+    }}
+
+    function buildAggregateSectionHtml(title, nameLabel, rows) {{
+      if (!rows.length) {{
+        return `<section class="panel">
+    <div class="section-heading">
+      <h2>${{escapeHtml(title)}}</h2>
+      <p>Nenhum registro encontrado.</p>
+    </div>
+  </section>`;
+      }}
+      return `<section class="panel">
+    <div class="section-heading">
+      <div class="section-heading-top">
+        <h2>${{escapeHtml(title)}}</h2>
+        <button class="export-image-btn" type="button" data-export-label="${{escapeHtml(title)}}">Gerar imagem da lista</button>
+      </div>
+      <p>Ranking baseado em peso total e entregas.</p>
+    </div>
+${{buildPodiumHtml(rows)}}
+    <div class="ranking-table">
+      <table>
+        <thead>
+          <tr>
+            <th data-short="RK">Rank</th>
+            <th data-short="COLAB">${{escapeHtml(nameLabel)}}</th>
+            <th data-short="ENT">Entregas</th>
+            <th data-short="PESO">Peso</th>
+          </tr>
+        </thead>
+        <tbody>
+${{buildRankingRowsHtml(rows, nameLabel)}}
+        </tbody>
+      </table>
+    </div>
+  </section>`;
+    }}
+
+    function updateAggregateSections(selected) {{
+      const block = currentBlock();
+      if (!block) return;
+      if (!isFilteredSelection(selected)) {{
+        targets.placas.innerHTML = block.placas;
+        targets.clientes.innerHTML = block.clientes;
+        targets.cidades.innerHTML = block.cidades;
+        return;
+      }}
+      targets.placas.innerHTML = buildAggregateSectionHtml("Placas", "Placa", aggregateSelectedRows(selected, "placa"));
+      targets.clientes.innerHTML = buildAggregateSectionHtml("Clientes", "Cliente", aggregateSelectedRows(selected, "cliente"));
+      targets.cidades.innerHTML = buildAggregateSectionHtml("Cidades", "Cidade", aggregateSelectedRows(selected, "cidade"));
+    }}
+
     function updateMetricCard(selector, value, subtitle) {{
       document.querySelectorAll(selector).forEach((card) => {{
         const valueElement = card.querySelector(".metric-value");
@@ -1916,8 +2086,7 @@ def render_dashboard(
     }}
 
     function updateMainMetrics(selected, totalEntregas, totalPeso, selectedNames) {{
-      const isFiltered = collaboratorCheckboxes.length > 0 && selected.size < collaboratorCheckboxes.length;
-      if (!isFiltered) {{
+      if (!isFilteredSelection(selected)) {{
         updateMetricCard(".metric-card.metric-total", null, null);
         updateMetricCard(".metric-card.metric-primary", null, null);
         return;
@@ -1956,7 +2125,7 @@ def render_dashboard(
           : `${{count}} colaborador${{count === 1 ? "" : "es"}}`;
       }});
       document.querySelectorAll(".metric-card.metric-selected").forEach((card) => {{
-        const shouldShow = collaboratorCheckboxes.length > 0 && selected.size < collaboratorCheckboxes.length;
+        const shouldShow = isFilteredSelection(selected);
         card.hidden = !shouldShow;
       }});
     }}
@@ -2049,6 +2218,7 @@ def render_dashboard(
       const selected = getSelectedCollaborators();
       refreshCollaboratorSummary(selected.size);
       updateSelectedMetric(selected);
+      updateAggregateSections(selected);
       document.querySelectorAll('[data-filterable-section="colaboradores"]').forEach((section) => {{
         const rows = Array.from(section.querySelectorAll("tbody tr[data-colaborador-key]"));
         if (!rows.length) return;
@@ -2271,6 +2441,7 @@ def main() -> None:
         return f"Periodo analisado: {min(valores).strftime('%d/%m/%Y')} - {max(valores).strftime('%d/%m/%Y')}"
 
     monthly_blocks: dict[str, dict[str, str]] = {}
+    monthly_filter_records: dict[str, list[dict[str, object]]] = {}
 
     def compute_blocks(df_subset: pd.DataFrame, label_periodo: str) -> dict[str, str]:
         mot, aj = resumir_colaboradores(df_subset, role_map=role_map)
@@ -2373,19 +2544,22 @@ def main() -> None:
 
     # All
     monthly_blocks["all"] = compute_blocks(df, period_text(df))
+    monthly_filter_records["all"] = build_filter_records(df, role_map)
 
     # Per month
     for key, _label in month_options:
         subset = df[df["data"].dt.strftime("%Y-%m") == key]
         monthly_blocks[key] = compute_blocks(subset, period_text(subset))
+        monthly_filter_records[key] = build_filter_records(subset, role_map)
 
     html = render_dashboard(
         motoristas,
         ajudantes,
         month_options,
         monthly_blocks,
-        df["data"].dropna().tolist(),
-        photo_map,
+        monthly_filter_records,
+        periodo=df["data"].dropna().tolist(),
+        photo_map=photo_map,
     )
     output_path = base_path / OUTPUT_NAME
     output_path.write_text(html, encoding="utf-8")
