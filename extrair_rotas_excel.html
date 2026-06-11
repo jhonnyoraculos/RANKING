@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Extrair Rotas para Excel</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #64748b;
+      --line: #dbe3f0;
+      --primary: #174ea6;
+      --primary-dark: #103a7c;
+      --green: #0f766e;
+      --red: #b42318;
+      --shadow: 0 18px 45px rgba(15, 23, 42, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    main {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 28px auto 56px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 28px;
+      line-height: 1.15;
+    }
+
+    .header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .brand {
+      width: 124px;
+      height: 60px;
+      object-fit: contain;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid rgba(219, 227, 240, 0.9);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+      margin-bottom: 18px;
+    }
+
+    .drop-zone {
+      display: grid;
+      place-items: center;
+      min-height: 170px;
+      border: 2px dashed #9db6df;
+      border-radius: 8px;
+      background: #f8fbff;
+      text-align: center;
+      padding: 24px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+
+    .drop-zone.dragover {
+      border-color: var(--primary);
+      background: #edf5ff;
+    }
+
+    .drop-zone strong {
+      display: block;
+      font-size: 20px;
+      margin-bottom: 6px;
+    }
+
+    .drop-zone span {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 11px 16px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 14px;
+      transition: transform 0.12s ease, opacity 0.12s ease, background 0.12s ease;
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .primary {
+      background: var(--primary);
+      color: #ffffff;
+    }
+
+    .primary:hover:not(:disabled) {
+      background: var(--primary-dark);
+    }
+
+    .success {
+      background: var(--green);
+      color: #ffffff;
+    }
+
+    .ghost {
+      background: #e8eef8;
+      color: #213044;
+    }
+
+    .status {
+      min-height: 22px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .progress {
+      width: 100%;
+      height: 10px;
+      background: #e7edf7;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 14px;
+    }
+
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #174ea6, #0f766e);
+      transition: width 0.2s ease;
+    }
+
+    .file-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .file-chip {
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      border-radius: 999px;
+      padding: 7px 11px;
+      font-size: 13px;
+      color: #334155;
+    }
+
+    .preview-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .preview-head h2 {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    .count {
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      max-height: 560px;
+      background: #ffffff;
+    }
+
+    table {
+      width: 100%;
+      min-width: 860px;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #edf3ff;
+      color: #26364f;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 12px;
+    }
+
+    td[contenteditable="true"] {
+      background: #fffef7;
+      outline-color: var(--primary);
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 20px;
+      text-align: center;
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      background: #fafcff;
+    }
+
+    .warn {
+      color: var(--red);
+      font-weight: 700;
+    }
+
+    @media (max-width: 720px) {
+      main {
+        width: min(100vw - 20px, 1180px);
+        margin-top: 14px;
+      }
+
+      .header {
+        align-items: flex-start;
+      }
+
+      .brand {
+        display: none;
+      }
+
+      .panel {
+        padding: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header class="header">
+    <div>
+      <h1>Extrair rotas para Excel</h1>
+      <p>Ler imagem da escala e gerar planilha com Data, Mes, Placa, Motorista e Ajudante.</p>
+    </div>
+    <img class="brand" src="logo-jr.png" alt="JR Ferragens e Madeiras">
+  </header>
+
+  <section class="panel">
+    <label class="drop-zone" id="dropZone" for="imageInput">
+      <span>
+        <strong>Selecione ou arraste as imagens</strong>
+        PNG, JPG ou JPEG. Pode enviar varias imagens de uma vez.
+      </span>
+    </label>
+    <input id="imageInput" class="file-input" type="file" accept="image/*" multiple>
+
+    <div class="controls">
+      <div class="button-row">
+        <button id="processButton" class="primary" type="button" disabled>Processar imagens</button>
+        <button id="downloadButton" class="success" type="button" disabled>Baixar Excel</button>
+        <button id="clearButton" class="ghost" type="button">Limpar</button>
+      </div>
+      <div class="status" id="status">Nenhuma imagem selecionada.</div>
+    </div>
+    <div class="progress" aria-hidden="true">
+      <div id="progressBar" class="progress-bar"></div>
+    </div>
+    <div id="fileList" class="file-list"></div>
+  </section>
+
+  <section class="panel">
+    <div class="preview-head">
+      <h2>Previa da planilha</h2>
+      <span id="rowCount" class="count">0 linhas</span>
+    </div>
+    <div id="emptyState" class="empty">Depois de processar, os dados aparecem aqui para conferencia.</div>
+    <div id="tableWrap" class="table-wrap" hidden>
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Mes</th>
+            <th>Placa</th>
+            <th>Motorista</th>
+            <th>Ajudante</th>
+          </tr>
+        </thead>
+        <tbody id="previewBody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const imageInput = document.getElementById("imageInput");
+  const dropZone = document.getElementById("dropZone");
+  const processButton = document.getElementById("processButton");
+  const downloadButton = document.getElementById("downloadButton");
+  const clearButton = document.getElementById("clearButton");
+  const statusElement = document.getElementById("status");
+  const progressBar = document.getElementById("progressBar");
+  const fileList = document.getElementById("fileList");
+  const previewBody = document.getElementById("previewBody");
+  const tableWrap = document.getElementById("tableWrap");
+  const emptyState = document.getElementById("emptyState");
+  const rowCount = document.getElementById("rowCount");
+
+  const monthMap = {
+    janeiro: "01",
+    fevereiro: "02",
+    marco: "03",
+    março: "03",
+    abril: "04",
+    maio: "05",
+    junho: "06",
+    julho: "07",
+    agosto: "08",
+    setembro: "09",
+    outubro: "10",
+    novembro: "11",
+    dezembro: "12",
+  };
+
+  const layout = {
+    date: { x: 0.422, y: 0.058, w: 0.244, h: 0.112 },
+    rowStart: 0.236,
+    rowHeight: 0.0455,
+    rowEnd: 0.962,
+    columns: {
+      placa: { x: 0.082, w: 0.134 },
+      placaWide: { x: 0.070, w: 0.165 },
+      motorista: { x: 0.422, w: 0.243 },
+      ajudante: { x: 0.667, w: 0.194 },
+    },
+  };
+
+  let selectedFiles = [];
+  let extractedRows = [];
+
+  const referenceNames = [
+    "ALDEMIR LUIZ",
+    "ALEX CAETANO",
+    "ANIVALDO DUARTE",
+    "ANDRE LUIZ",
+    "ARLAN CAETANO",
+    "ARMED JUNIO",
+    "BRUNO MENDES",
+    "CAIQUE DE ALMEIDA",
+    "CAIQUE LACERDA DOS SANTOS",
+    "CELSO ANTONIO",
+    "CHARLES COSTA SANTOS",
+    "CRISTIANO CLEMENTINO",
+    "DEVIS PENA DE OLIVEIRA",
+    "DIEGO GERALDO",
+    "DOUGLAS ALBERTINO",
+    "DOUGLAS RODRIGUES",
+    "EDER SILVA",
+    "EMERSON FELIPE MACHADO",
+    "FELIPE AUGUSTO MARQUES OLIVEIRA",
+    "FERNANDO GOMES",
+    "FRANCES FRANCO",
+    "FREDER HENRIQUE",
+    "GERALDO FERNANDO",
+    "GILSON AUGUSTO SUDARIO",
+    "GUILHERME ALVES SILVA",
+    "GUILHERME HENRIQUE",
+    "HIPOCRATES HERSCHEL",
+    "IAGO RAIMUNDO",
+    "JOAO HELIO",
+    "JOAO VITOR",
+    "JOSE ANTONIO",
+    "JOSE ARILDO",
+    "KAIQUE DE ALMEIDA",
+    "KAIO FERNANDO",
+    "LUCAS APARECIDO",
+    "LUCAS GABRIEL",
+    "LUCAS SILVA",
+    "LUIS EDUARDO",
+    "MARCIO ANTONIO GARCIA",
+    "MARCOS HEITOR DA SILVA",
+    "MARCOS PAULO MILAGRES",
+    "MARCOS PAULO",
+    "MATEUS SEVERINO",
+    "MATHEUS RINALDO",
+    "PAULO HENRIQUE",
+    "PEDRO AMARAL E SILVA",
+    "RAIMUNDO ADRIANO",
+    "REGINALDO MOREIRA",
+    "RICARDO DE OLIVEIRA",
+    "ROBERT JHONATHAN",
+    "ROGERIO DAS NEVES MEDEIROS SANTO",
+    "ROGERIO DAS NEVES",
+    "RONALDO PEREIRA",
+    "SIDNEY RAIMUNDO",
+    "TIAGO PEREIRA DOS SANTOS",
+    "VALTER JUNIOR",
+    "WASHINGTON GERALDO",
+    "WESLEY ANTONIO",
+    "WESLEY LUCIO",
+    "WEVERSON FERREIRA DOS SANTOS",
+    "WILLIAN DE SOUZA",
+  ];
+
+  const referencePlates = [
+    "GZO4143",
+    "GNE7I47",
+    "HMF9A43",
+    "HCU3640",
+    "GMU7603",
+    "GUI1D17",
+    "PYP0E41",
+    "PVS3G72",
+    "KPD8B85",
+    "SHF2B15",
+    "SHI1I12",
+    "GVU4H57",
+    "HDI7H21",
+    "HLQ2D58",
+    "SIE0C28",
+    "SHJ4B57",
+    "LAX4I74",
+    "PVD1G23",
+    "PCD7I11",
+    "YVY4E15",
+  ];
+
+  function setStatus(text, isError = false) {
+    statusElement.textContent = text;
+    statusElement.classList.toggle("warn", isError);
+  }
+
+  function setProgress(done, total) {
+    const percent = total ? Math.round((done / total) * 100) : 0;
+    progressBar.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+  }
+
+  function normalizeText(value) {
+    return (value || "")
+      .replace(/[▼▽▾]/g, " ")
+      .replace(/[|]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function normalizeForSearch(value) {
+    return normalizeText(value)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+  }
+
+  function comparable(value) {
+    return normalizeText(value)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/\bMOT\b/g, " ")
+      .replace(/[^A-Z0-9 ]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function levenshtein(a, b) {
+    const left = a || "";
+    const right = b || "";
+    if (!left) return right.length;
+    if (!right) return left.length;
+    const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+    const current = new Array(right.length + 1);
+    for (let i = 1; i <= left.length; i += 1) {
+      current[0] = i;
+      for (let j = 1; j <= right.length; j += 1) {
+        const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+        current[j] = Math.min(
+          current[j - 1] + 1,
+          previous[j] + 1,
+          previous[j - 1] + cost
+        );
+      }
+      for (let j = 0; j <= right.length; j += 1) previous[j] = current[j];
+    }
+    return previous[right.length];
+  }
+
+  function similarity(a, b) {
+    const left = comparable(a).replace(/[^A-Z0-9]/g, "");
+    const right = comparable(b).replace(/[^A-Z0-9]/g, "");
+    if (!left || !right) return 0;
+    if (left.includes(right) || right.includes(left)) {
+      return Math.min(left.length, right.length) / Math.max(left.length, right.length);
+    }
+    const distance = levenshtein(left, right);
+    return 1 - (distance / Math.max(left.length, right.length));
+  }
+
+  function bestReference(value, references, minScore = 0.62) {
+    const text = comparable(value)
+      .replace(/^[A-Z]?\s+/, "")
+      .replace(/^\d+/, "")
+      .trim();
+    if (!text) return "";
+    let best = "";
+    let bestScore = 0;
+    for (const reference of references) {
+      const score = similarity(text, reference);
+      if (score > bestScore) {
+        best = reference;
+        bestScore = score;
+      }
+    }
+    return bestScore >= minScore ? best : "";
+  }
+
+  function cleanName(value) {
+    const cleaned = normalizeText(value)
+      .replace(/^[^A-Za-zÀ-ÿ0-9]+/, "")
+      .replace(/[^A-Za-zÀ-ÿ0-9. ]+$/g, "")
+      .replace(/\bMOT\b/gi, "")
+      .replace(/^\d+/, "")
+      .replace(/^[A-Z]\s+(?=[A-Z]{3})/, "")
+      .replace(/\s+/g, " ")
+      .toUpperCase();
+    return bestReference(cleaned, referenceNames) || cleaned;
+  }
+
+  function hasReferenceName(value) {
+    return Boolean(bestReference(value, referenceNames, 0.62));
+  }
+
+  function cleanPlate(value) {
+    const compact = normalizeText(value)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "");
+
+    const direct = compact.match(/[A-Z]{3}\d[A-Z0-9]\d{2}/);
+    if (direct && referencePlates.includes(direct[0])) return direct[0];
+    if (direct) {
+      const correctedDirect = bestReference(direct[0], referencePlates, 0.78);
+      return correctedDirect || direct[0];
+    }
+
+    const toLetter = {
+      "0": "O",
+      "1": "I",
+      "2": "Z",
+      "3": "B",
+      "4": "A",
+      "5": "S",
+      "6": "G",
+      "7": "T",
+      "8": "B",
+    };
+    const toDigit = {
+      O: "0",
+      Q: "0",
+      D: "0",
+      I: "1",
+      L: "1",
+      T: "7",
+      Z: "2",
+      A: "4",
+      S: "5",
+      G: "6",
+      B: "8",
+    };
+
+    for (let start = 0; start <= compact.length - 7; start += 1) {
+      const raw = compact.slice(start, start + 7).split("");
+      const fixed = raw.map((char, index) => {
+        if (index <= 2) return /[A-Z]/.test(char) ? char : (toLetter[char] || char);
+        if (index === 3 || index >= 5) return /\d/.test(char) ? char : (toDigit[char] || char);
+        return char;
+      }).join("");
+      if (/^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(fixed)) {
+        return bestReference(fixed, referencePlates, 0.78) || fixed;
+      }
+    }
+
+    return "";
+  }
+
+  function parseDate(value) {
+    const text = normalizeForSearch(value);
+    const direct = text.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
+    if (direct) {
+      const day = direct[1].padStart(2, "0");
+      const month = direct[2].padStart(2, "0");
+      const year = direct[3].length === 2 ? `20${direct[3]}` : direct[3];
+      return { data: `${day}/${month}/${year}`, mes: `${month}/${year}` };
+    }
+
+    const longDate = text.match(/(\d{1,2})\s+de\s+([a-zç]+)\s+de\s+(\d{4})/);
+    if (longDate) {
+      const day = longDate[1].padStart(2, "0");
+      const month = monthMap[longDate[2]] || "";
+      const year = longDate[3];
+      if (month) return { data: `${day}/${month}/${year}`, mes: `${month}/${year}` };
+    }
+
+    return { data: "", mes: "" };
+  }
+
+  function refreshFileList() {
+    fileList.innerHTML = "";
+    selectedFiles.forEach((file) => {
+      const chip = document.createElement("span");
+      chip.className = "file-chip";
+      chip.textContent = file.name;
+      fileList.appendChild(chip);
+    });
+    processButton.disabled = selectedFiles.length === 0;
+    setStatus(selectedFiles.length ? `${selectedFiles.length} imagem(ns) selecionada(s).` : "Nenhuma imagem selecionada.");
+  }
+
+  function setFiles(files) {
+    selectedFiles = Array.from(files || []).filter((file) => file.type.startsWith("image/"));
+    refreshFileList();
+  }
+
+  function loadImage(file) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error(`Nao foi possivel abrir ${file.name}.`));
+      image.src = URL.createObjectURL(file);
+    });
+  }
+
+  function cropImage(image, box, scale = 4, profile = "text") {
+    const sourceX = Math.round(box.x * image.naturalWidth);
+    const sourceY = Math.round(box.y * image.naturalHeight);
+    const sourceW = Math.round(box.w * image.naturalWidth);
+    const sourceH = Math.round(box.h * image.naturalHeight);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, sourceW * scale);
+    canvas.height = Math.max(1, sourceH * scale);
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.imageSmoothingEnabled = true;
+    context.drawImage(image, sourceX, sourceY, sourceW, sourceH, 0, 0, canvas.width, canvas.height);
+    enhanceCanvas(canvas, profile);
+    return canvas;
+  }
+
+  function enhanceCanvas(canvas, profile = "text") {
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    for (let index = 0; index < data.length; index += 4) {
+      const gray = (data[index] * 0.299) + (data[index + 1] * 0.587) + (data[index + 2] * 0.114);
+      let adjusted;
+      if (profile === "plate") {
+        adjusted = gray < 185 ? 0 : 255;
+      } else {
+        adjusted = Math.max(0, Math.min(255, ((gray - 128) * 1.65) + 128));
+      }
+      data[index] = adjusted;
+      data[index + 1] = adjusted;
+      data[index + 2] = adjusted;
+    }
+    context.putImageData(imageData, 0, 0);
+  }
+
+  async function readCrop(worker, image, box, mode = "single-line") {
+    const canvas = cropImage(image, box, 4, mode === "plate" ? "plate" : "text");
+    const parameters = {
+      tessedit_pageseg_mode: mode === "single-word" || mode === "plate" ? "8" : "7",
+      preserve_interword_spaces: "1",
+      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÁÂÃÇÉÊÍÓÔÕÚÜàáâãçéêíóôõúü ",
+    };
+    if (mode === "plate") {
+      parameters.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-";
+    } else if (mode === "date") {
+      parameters.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÁÂÃÇÉÊÍÓÔÕÚÜàáâãçéêíóôõúü0123456789 /,.-";
+    }
+    await worker.setParameters(parameters);
+    const result = await worker.recognize(canvas);
+    return normalizeText(result.data.text);
+  }
+
+  function rowBoxes(rowIndex) {
+    const y = layout.rowStart + (rowIndex * layout.rowHeight);
+    return {
+      placa: { ...layout.columns.placa, y, h: layout.rowHeight },
+      placaWide: { ...layout.columns.placaWide, y, h: layout.rowHeight },
+      motorista: { ...layout.columns.motorista, y, h: layout.rowHeight },
+      ajudante: { ...layout.columns.ajudante, y, h: layout.rowHeight },
+    };
+  }
+
+  async function processImage(worker, file, progress) {
+    const image = await loadImage(file);
+    const dateText = await readCrop(worker, image, layout.date, "date");
+    const dateInfo = parseDate(dateText);
+    const maxRows = Math.floor((layout.rowEnd - layout.rowStart) / layout.rowHeight);
+    const rows = [];
+
+    for (let index = 0; index < maxRows; index += 1) {
+      const boxes = rowBoxes(index);
+      const placaText = await readCrop(worker, image, boxes.placa, "plate");
+      const motoristaText = await readCrop(worker, image, boxes.motorista);
+      const ajudanteText = await readCrop(worker, image, boxes.ajudante);
+      progress.step();
+
+      let placa = cleanPlate(placaText);
+      if (!placa) {
+        const placaWideText = await readCrop(worker, image, boxes.placaWide, "plate");
+        placa = cleanPlate(placaWideText);
+      }
+      const motorista = cleanName(motoristaText);
+      const ajudante = cleanName(ajudanteText);
+      if (!placa && !motorista && !ajudante) continue;
+      if (!placa && motorista.length < 3 && ajudante.length < 3) continue;
+      if (!placa && !hasReferenceName(motoristaText) && !hasReferenceName(ajudanteText)) continue;
+
+      rows.push({
+        Data: dateInfo.data,
+        Mes: dateInfo.mes,
+        Placa: placa,
+        Motorista: motorista,
+        Ajudante: ajudante,
+      });
+    }
+
+    URL.revokeObjectURL(image.src);
+    return rows;
+  }
+
+  function renderPreview() {
+    previewBody.innerHTML = "";
+    extractedRows.forEach((row, index) => {
+      const tr = document.createElement("tr");
+      ["Data", "Mes", "Placa", "Motorista", "Ajudante"].forEach((key) => {
+        const td = document.createElement("td");
+        td.contentEditable = "true";
+        td.dataset.row = String(index);
+        td.dataset.key = key;
+        td.textContent = row[key] || "";
+        tr.appendChild(td);
+      });
+      previewBody.appendChild(tr);
+    });
+
+    tableWrap.hidden = extractedRows.length === 0;
+    emptyState.hidden = extractedRows.length > 0;
+    rowCount.textContent = `${extractedRows.length} linha${extractedRows.length === 1 ? "" : "s"}`;
+    downloadButton.disabled = extractedRows.length === 0;
+  }
+
+  function syncEditedRows() {
+    previewBody.querySelectorAll("td[contenteditable='true']").forEach((cell) => {
+      const rowIndex = Number(cell.dataset.row);
+      const key = cell.dataset.key;
+      if (extractedRows[rowIndex] && key) {
+        extractedRows[rowIndex][key] = normalizeText(cell.textContent);
+      }
+    });
+  }
+
+  async function processFiles() {
+    if (!selectedFiles.length) return;
+    if (!window.Tesseract || !window.XLSX) {
+      setStatus("Nao carregou as bibliotecas. Verifique a internet e abra de novo.", true);
+      return;
+    }
+
+    processButton.disabled = true;
+    downloadButton.disabled = true;
+    extractedRows = [];
+    renderPreview();
+
+    const totalSteps = selectedFiles.length * Math.floor((layout.rowEnd - layout.rowStart) / layout.rowHeight);
+    let doneSteps = 0;
+    const progress = {
+      step() {
+        doneSteps += 1;
+        setProgress(doneSteps, totalSteps);
+      },
+    };
+
+    let worker;
+    try {
+      setStatus("Carregando leitor de imagem...");
+      worker = await Tesseract.createWorker("por+eng", 1, {
+        logger(message) {
+          if (message.status === "recognizing text") {
+            setStatus(`Lendo imagem... ${Math.round((message.progress || 0) * 100)}%`);
+          }
+        },
+      });
+
+      for (const [index, file] of selectedFiles.entries()) {
+        setStatus(`Processando ${file.name} (${index + 1}/${selectedFiles.length})...`);
+        const rows = await processImage(worker, file, progress);
+        extractedRows.push(...rows);
+        renderPreview();
+      }
+
+      setStatus(`Pronto. Confira a previa e baixe o Excel.`);
+      setProgress(1, 1);
+    } catch (error) {
+      console.error(error);
+      setStatus(error.message || "Erro ao processar imagem.", true);
+    } finally {
+      if (worker) await worker.terminate();
+      processButton.disabled = selectedFiles.length === 0;
+      downloadButton.disabled = extractedRows.length === 0;
+    }
+  }
+
+  function downloadExcel() {
+    syncEditedRows();
+    const rows = extractedRows.map((row) => ({
+      Data: row.Data || "",
+      Mes: row.Mes || "",
+      Placa: row.Placa || "",
+      Motorista: row.Motorista || "",
+      Ajudante: row.Ajudante || "",
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(rows, {
+      header: ["Data", "Mes", "Placa", "Motorista", "Ajudante"],
+    });
+    worksheet["!cols"] = [
+      { wch: 12 },
+      { wch: 10 },
+      { wch: 12 },
+      { wch: 28 },
+      { wch: 28 },
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Rotas");
+    XLSX.writeFile(workbook, "rotas_extraidas.xlsx");
+  }
+
+  function clearAll() {
+    selectedFiles = [];
+    extractedRows = [];
+    imageInput.value = "";
+    fileList.innerHTML = "";
+    setProgress(0, 1);
+    renderPreview();
+    refreshFileList();
+  }
+
+  imageInput.addEventListener("change", () => setFiles(imageInput.files));
+  processButton.addEventListener("click", processFiles);
+  downloadButton.addEventListener("click", downloadExcel);
+  clearButton.addEventListener("click", clearAll);
+
+  previewBody.addEventListener("input", syncEditedRows);
+
+  dropZone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    dropZone.classList.add("dragover");
+  });
+
+  dropZone.addEventListener("dragleave", () => {
+    dropZone.classList.remove("dragover");
+  });
+
+  dropZone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    dropZone.classList.remove("dragover");
+    setFiles(event.dataTransfer.files);
+  });
+
+  renderPreview();
+})();
+</script>
+</body>
+</html>
