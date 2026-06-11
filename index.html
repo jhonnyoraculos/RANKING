@@ -29253,17 +29253,54 @@
       return `${formatNumber(number, 2)} kg`;
     }
 
+    function updateMetricCard(selector, value, subtitle) {
+      document.querySelectorAll(selector).forEach((card) => {
+        const valueElement = card.querySelector(".metric-value");
+        const subtitleElement = card.querySelector(".metric-sub");
+        if (valueElement && !card.dataset.defaultValue) {
+          card.dataset.defaultValue = valueElement.innerHTML;
+        }
+        if (subtitleElement && !card.dataset.defaultSubtitle) {
+          card.dataset.defaultSubtitle = subtitleElement.innerHTML;
+        }
+        if (valueElement) {
+          valueElement.textContent = value === null ? "" : value;
+          if (value === null) valueElement.innerHTML = card.dataset.defaultValue || "";
+        }
+        if (subtitleElement) {
+          subtitleElement.textContent = subtitle === null ? "" : subtitle;
+          if (subtitle === null) subtitleElement.innerHTML = card.dataset.defaultSubtitle || "";
+        }
+      });
+    }
+
+    function updateMainMetrics(selected, totalEntregas, totalPeso, selectedNames) {
+      const isFiltered = collaboratorCheckboxes.length > 0 && selected.size < collaboratorCheckboxes.length;
+      if (!isFiltered) {
+        updateMetricCard(".metric-card.metric-total", null, null);
+        updateMetricCard(".metric-card.metric-primary", null, null);
+        return;
+      }
+      const selectedNameList = Array.from(selectedNames.values());
+      const subtitle = selectedNameList.length === 1
+        ? `Dados de ${selectedNameList[0]}`
+        : "Dados dos selecionados";
+      updateMetricCard(".metric-card.metric-total", formatQuantityValue(totalEntregas), subtitle);
+      updateMetricCard(".metric-card.metric-primary", formatWeight(totalPeso), subtitle);
+    }
+
     function updateSelectedMetric(selected) {
       let totalEntregas = 0;
       let totalPeso = 0;
-      const selectedInPeriod = new Set();
+      const selectedNames = new Map();
       document.querySelectorAll('[data-comparison-source="colaboradores"] tbody tr[data-colaborador-key]').forEach((row) => {
         if (!selected.has(row.dataset.colaboradorKey)) return;
         totalEntregas += Number(row.dataset.entregas || 0);
         totalPeso += Number(row.dataset.peso || 0);
-        selectedInPeriod.add(row.dataset.colaboradorKey);
+        selectedNames.set(row.dataset.colaboradorKey, row.dataset.colaboradorName || row.dataset.colaboradorKey);
       });
 
+      updateMainMetrics(selected, totalEntregas, totalPeso, selectedNames);
       document.querySelectorAll("[data-selected-entregas]").forEach((element) => {
         element.textContent = formatQuantityValue(totalEntregas);
       });
@@ -29271,8 +29308,11 @@
         element.textContent = formatWeight(totalPeso);
       });
       document.querySelectorAll("[data-selected-count]").forEach((element) => {
-        const count = selectedInPeriod.size;
-        element.textContent = `${count} colaborador${count === 1 ? "" : "es"}`;
+        const names = Array.from(selectedNames.values());
+        const count = names.length;
+        element.textContent = count === 1
+          ? names[0]
+          : `${count} colaborador${count === 1 ? "" : "es"}`;
       });
       document.querySelectorAll(".metric-card.metric-selected").forEach((card) => {
         const shouldShow = collaboratorCheckboxes.length > 0 && selected.size < collaboratorCheckboxes.length;
