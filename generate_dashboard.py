@@ -3,9 +3,12 @@
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
+import atexit
 import html
 import math
 import re
+import shutil
+import tempfile
 import unicodedata
 import json
 
@@ -87,6 +90,23 @@ def clean_name(value: object) -> str | None:
     if placeholder in {"sem_motorista", "sem_ajudante", "nao_informado"}:
         return None
     return nome
+
+
+def clean_plate(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii").upper()
+    match = re.search(r"\b([A-Z]{3})[-\s]?(\d[A-Z0-9]\d{2})\b", text)
+    if not match:
+        return None
+    return f"{match.group(1)}{match.group(2)}"
+
+
+def display_name(value: object) -> str:
+    text = str(value).strip()
+    if re.fullmatch(r"[A-Z]{3}\d[A-Z0-9]\d{2}", text.upper()):
+        return text.upper()
+    return text.title()
 
 
 def normalize_display_name(value: str) -> str:
@@ -296,6 +316,23 @@ def load_local_photos(base_path: Path) -> dict[str, str]:
     return mapping
 
 
+def prepare_workbook_for_read(path: Path) -> tuple[Path, Path | None]:
+    try:
+        with path.open("rb"):
+            return path, None
+    except PermissionError:
+        temp_file = tempfile.NamedTemporaryFile(
+            prefix="~dashboard_read_",
+            suffix=path.suffix,
+            dir=path.parent,
+            delete=False,
+        )
+        temp_path = Path(temp_file.name)
+        temp_file.close()
+        shutil.copy2(path, temp_path)
+        return temp_path, temp_path
+
+
 def load_planilha(path: Path) -> pd.DataFrame:
     def parse_number(value: object) -> float:
         if pd.isna(value):
@@ -371,8 +408,7 @@ def load_planilha(path: Path) -> pd.DataFrame:
         df["placa"] = None
     df["placa"] = (
         df["placa"]
-        .apply(lambda placa: placa.strip() if isinstance(placa, str) else None)
-        .apply(lambda placa: re.sub(r"\s*-\s*$", "", placa) if isinstance(placa, str) else placa)
+        .apply(clean_plate)
         .replace("", None)
         .fillna("Placa nao informada")
     )
@@ -574,7 +610,7 @@ def resumir_placas(df: pd.DataFrame) -> pd.DataFrame:
     base = df.copy()
     base["placa"] = base["placa"].fillna("Placa nao informada")
     base["placa"] = base["placa"].apply(
-        lambda nome: nome.strip().upper() if isinstance(nome, str) and nome.strip() else "Placa nao informada"
+        lambda nome: clean_plate(nome) or "Placa nao informada"
     )
     return (
         base.groupby("placa")[["entregas", "peso", "valor"]]
@@ -662,7 +698,7 @@ def build_podium(summary: pd.DataFrame, photo_map: dict[str, str], *, sort_colum
         entregas = responsive_text(format_quantity(row.entregas), format_compact_number(row.entregas, 1))
         peso = responsive_text(format_number(row.peso, 2), format_compact_number(row.peso, 1))
         nome_original = str(row.colaborador).strip()
-        nome = nome_original.title()
+        nome = display_name(nome_original)
         photo_src = lookup_photo(nome_original, photo_map)
         if photo_src:
             avatar = f'<div class="podium-avatar has-photo"><img src="{photo_src}" alt="{nome}"></div>'
@@ -695,7 +731,7 @@ def build_ranking_table(
     for rank, row in enumerate(summary.itertuples(index=False), start=1):
         classe = " class=\"is-top\"" if rank <= 3 else ""
         nome_original = str(row.colaborador).strip()
-        nome = nome_original.title()
+        nome = display_name(nome_original)
         attrs = ""
         if filterable_collaborators:
             colaborador_nome = colaborador_base_name(nome_original)
@@ -2133,8 +2169,12 @@ def main() -> None:
     if not excel_path.exists():
         raise FileNotFoundError(f"Planilha nao encontrada: {excel_path}")
 
-    df = load_planilha(excel_path)
-    role_map = load_colaboradores_roles(excel_path)
+    workbook_path, temp_workbook_path = prepare_workbook_for_read(excel_path)
+    if temp_workbook_path is not None:
+        atexit.register(lambda path=temp_workbook_path: path.unlink(missing_ok=True))
+
+    df = load_planilha(workbook_path)
+    role_map = load_colaboradores_roles(workbook_path)
     motoristas, ajudantes = resumir_colaboradores(df, role_map=role_map)
     # Dados por cidade para filtro mensal
     city_rows: list[dict[str, object]] = []
@@ -2159,7 +2199,7 @@ def main() -> None:
     month_options = sorted(month_keys.items(), reverse=True)
     # Fotos: prioridade para pasta local (PHOTO_INPUT_DIR) e, se existir, imagens embutidas na planilha
     local_photos = load_local_photos(base_path / PHOTO_INPUT_DIR)
-    excel_photos = collect_photos(excel_path)
+    excel_photos = collect_photos(workbook_path)
     photo_map = {**excel_photos, **local_photos}
     def period_text(subset: pd.DataFrame) -> str:
         valores = [p for p in subset["data"] if pd.notna(p)]
