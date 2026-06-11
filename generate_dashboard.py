@@ -68,10 +68,19 @@ def responsive_text(full_text: str, compact_text: str) -> str:
     return f'<span class="value-full">{full_text}</span><span class="value-compact">{compact_text}</span>'
 
 
+def strip_contact_from_name(value: str) -> str:
+    text = value.strip()
+    text = re.sub(r"(?i)\b(?:telefone|telefones|tel|fone|celular|contato|whatsapp)\b\s*:?.*$", "", text)
+    text = re.sub(r"\s*[/\\|]+\s*(?:\(?\d{2}\)?[\d\s().-]{6,})+\s*$", "", text)
+    text = re.sub(r"\s+(?:\(?\d{2}\)?\s*)?\d[\d\s().-]{7,}\s*$", "", text)
+    text = re.sub(r"\s+[-:/\\|]+$", "", text)
+    return " ".join(text.split())
+
+
 def clean_name(value: object) -> str | None:
     if not isinstance(value, str):
         return None
-    nome = " ".join(value.strip().split())
+    nome = strip_contact_from_name(value)
     if not nome or nome.lower() == "nan":
         return None
     placeholder = normalize_key(nome)
