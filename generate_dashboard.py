@@ -65,6 +65,20 @@ def format_compact_number(value: float, decimals: int = 1) -> str:
     return format_number(number, min(decimals, 2))
 
 
+def strip_decimal_zeros(value: str) -> str:
+    return value.rstrip("0").rstrip(",")
+
+
+def format_weight(value: float) -> str:
+    if pd.isna(value):
+        return "-"
+    number = float(value)
+    if abs(number) >= 1_000:
+        tons = strip_decimal_zeros(format_number(number / 1_000, 1))
+        return f"{tons} t"
+    return f"{format_number(number, 2)} kg"
+
+
 def responsive_text(full_text: str, compact_text: str) -> str:
     if full_text == compact_text:
         return full_text
@@ -628,10 +642,7 @@ def build_metrics(summary: pd.DataFrame, *, total_entregas: float | None = None,
         format_number(total_entregas, 0),
         format_compact_number(total_entregas, 1),
     )
-    peso_text = responsive_text(
-        f"{format_number(total_peso_kg, 3)} kg",
-        f"{format_compact_number(total_peso_kg, 1)} kg",
-    )
+    peso_text = format_weight(total_peso_kg)
 
     metric_cards = [
         (
@@ -642,7 +653,7 @@ def build_metrics(summary: pd.DataFrame, *, total_entregas: float | None = None,
         ),
         (
             "metric-primary",
-            "Peso total (kg)",
+            "Peso total",
             peso_text,
             "Somatorio do periodo",
         ),
@@ -696,7 +707,7 @@ def build_podium(summary: pd.DataFrame, photo_map: dict[str, str], *, sort_colum
             continue
 
         entregas = responsive_text(format_quantity(row.entregas), format_compact_number(row.entregas, 1))
-        peso = responsive_text(format_number(row.peso, 2), format_compact_number(row.peso, 1))
+        peso = format_weight(row.peso)
         nome_original = str(row.colaborador).strip()
         nome = display_name(nome_original)
         photo_src = lookup_photo(nome_original, photo_map)
@@ -710,7 +721,7 @@ def build_podium(summary: pd.DataFrame, photo_map: dict[str, str], *, sort_colum
         {avatar}
         <h3>{nome}</h3>
         <p class="podium-value">Entregas: <strong>{entregas}</strong></p>
-        <p class="podium-value">Peso total: <strong>{peso} kg</strong></p>
+        <p class="podium-value">Peso total: <strong>{peso}</strong></p>
       </article>"""
         )
 
@@ -750,7 +761,7 @@ def build_ranking_table(
           <td data-label="Rank">{rank:02d}</td>
           <td data-label="{name_label}">{nome}</td>
           <td data-label="Entregas">{responsive_text(format_quantity(row.entregas), format_compact_number(row.entregas, 1))}</td>
-          <td data-label="Peso (kg)">{responsive_text(format_number(row.peso, 2), format_compact_number(row.peso, 1))}</td>
+          <td data-label="Peso">{format_weight(row.peso)}</td>
         </tr>"""
         )
 
@@ -762,7 +773,7 @@ def build_ranking_table(
             <th data-short="RK">Rank</th>
             <th data-short="COLAB">{name_label}</th>
             <th data-short="ENT">Entregas</th>
-            <th data-short="PESO">Peso (kg)</th>
+            <th data-short="PESO">Peso</th>
           </tr>
         </thead>
         <tbody>
@@ -831,7 +842,7 @@ def build_overall_summary(motoristas: pd.DataFrame, ajudantes: pd.DataFrame, pho
         else "-"
     )
     motorista_peso = (
-        responsive_text(format_number(top_motorista.peso, 2), format_compact_number(top_motorista.peso, 1))
+        format_weight(top_motorista.peso)
         if top_motorista is not None
         else "-"
     )
@@ -850,7 +861,7 @@ def build_overall_summary(motoristas: pd.DataFrame, ajudantes: pd.DataFrame, pho
         else "-"
     )
     ajudante_peso = (
-        responsive_text(format_number(top_ajudante.peso, 2), format_compact_number(top_ajudante.peso, 1))
+        format_weight(top_ajudante.peso)
         if top_ajudante is not None
         else "-"
     )
@@ -875,7 +886,7 @@ def build_overall_summary(motoristas: pd.DataFrame, ajudantes: pd.DataFrame, pho
           {motorista_avatar_html}
           <span>Top peso: <strong>{motorista_nome}</strong></span>
         </div>
-        <p class="summary-detail">Peso: {motorista_peso} kg &bull; Entregas: {motorista_entregas} &bull; Valor: R$ {motorista_valor}</p>
+        <p class="summary-detail">Peso: {motorista_peso} &bull; Entregas: {motorista_entregas} &bull; Valor: R$ {motorista_valor}</p>
       </article>
       <article class="summary-card ajudantes">
         <span class="summary-tag">Ajudantes</span>
@@ -884,7 +895,7 @@ def build_overall_summary(motoristas: pd.DataFrame, ajudantes: pd.DataFrame, pho
           {ajudante_avatar_html}
           <span>Top peso: <strong>{ajudante_nome}</strong></span>
         </div>
-        <p class="summary-detail">Peso: {ajudante_peso} kg &bull; Entregas: {ajudante_entregas} &bull; Valor: R$ {ajudante_valor}</p>
+        <p class="summary-detail">Peso: {ajudante_peso} &bull; Entregas: {ajudante_entregas} &bull; Valor: R$ {ajudante_valor}</p>
       </article>
     </div>
   </section>"""
@@ -1871,6 +1882,18 @@ def render_dashboard(
       return formatNumber(number, Number.isInteger(number) ? 0 : 1);
     }}
 
+    function trimDecimalZeros(value) {{
+      return value.replace(/,0+$/, "").replace(/,(\\d*?)0+$/, ",$1");
+    }}
+
+    function formatWeight(value) {{
+      const number = Number(value || 0);
+      if (Math.abs(number) >= 1000) {{
+        return `${{trimDecimalZeros(formatNumber(number / 1000, 1))}} t`;
+      }}
+      return `${{formatNumber(number, 2)}} kg`;
+    }}
+
     function updateSelectedMetric(selected) {{
       let totalEntregas = 0;
       let totalPeso = 0;
@@ -1886,7 +1909,7 @@ def render_dashboard(
         element.textContent = formatQuantityValue(totalEntregas);
       }});
       document.querySelectorAll("[data-selected-peso]").forEach((element) => {{
-        element.textContent = `${{formatNumber(totalPeso, 2)}} kg`;
+        element.textContent = formatWeight(totalPeso);
       }});
       document.querySelectorAll("[data-selected-count]").forEach((element) => {{
         const count = selectedInPeriod.size;
@@ -1943,7 +1966,7 @@ def render_dashboard(
 
       const peso = document.createElement("p");
       peso.className = "podium-value";
-      peso.innerHTML = "Peso total: <strong>" + row.children[3].innerHTML + " kg</strong>";
+      peso.innerHTML = "Peso total: <strong>" + row.children[3].innerHTML + "</strong>";
       card.appendChild(peso);
 
       return card;
