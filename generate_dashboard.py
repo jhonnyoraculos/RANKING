@@ -969,7 +969,8 @@ def build_filter_records(df_subset: pd.DataFrame, role_map: dict[str, str]) -> l
                 "placa": placa,
             },
         )
-        for record in mot_records + aj_records:
+        typed_records = [("motorista", record) for record in mot_records] + [("ajudante", record) for record in aj_records]
+        for role, record in typed_records:
             colaborador = str(record.get("colaborador", "")).strip()
             if not colaborador:
                 continue
@@ -977,6 +978,7 @@ def build_filter_records(df_subset: pd.DataFrame, role_map: dict[str, str]) -> l
                 {
                     "key": normalize_key(colaborador),
                     "name": colaborador,
+                    "role": role,
                     "cidade": record["cidade"],
                     "cliente": record["cliente"],
                     "placa": record["placa"],
@@ -988,21 +990,40 @@ def build_filter_records(df_subset: pd.DataFrame, role_map: dict[str, str]) -> l
     return records
 
 
+def build_raw_records(df_subset: pd.DataFrame) -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
+    for _, row in df_subset.iterrows():
+        records.append(
+            {
+                "cidade": str(row.get("cidade", "") or "").strip().title() or "Cidade Nao Informada",
+                "cliente": str(row.get("cliente", "") or "").strip().title() or "Cliente Nao Informado",
+                "placa": clean_plate(row.get("placa")) or "Placa nao informada",
+                "entregas": float(row.get("entregas", 0) or 0),
+                "peso": float(row.get("peso", 0) or 0),
+                "valor": float(row.get("valor", 0) or 0),
+            }
+        )
+    return records
+
+
 def render_dashboard(
     motoristas: pd.DataFrame,
     ajudantes: pd.DataFrame,
     month_options: list[tuple[str, str]],
     monthly_blocks: dict[str, dict[str, str]],
     monthly_filter_records: dict[str, list[dict[str, object]]],
+    monthly_raw_records: dict[str, list[dict[str, object]]],
+    monthly_totals: dict[str, dict[str, float]],
     periodo: Iterable[datetime] | None = None,
     photo_map: dict[str, str] | None = None,
 ) -> str:
     photo_map = photo_map or {}
-    default_month_key = month_options[0][0] if month_options else "all"
-    if default_month_key not in monthly_blocks:
-        default_month_key = "all"
-    options_html = "\n".join(
-        f'        <option value="{key}"{" selected" if key == default_month_key else ""}>{label}</option>'
+    default_month_key = "all"
+    month_options_html = "\n".join(
+        f"""          <label class="month-option">
+            <input class="month-checkbox" type="checkbox" value="{key}" checked>
+            <span>{label}</span>
+          </label>"""
         for key, label in month_options
     )
     collaborator_options_html = build_collaborator_filter_options([motoristas, ajudantes])
@@ -1463,27 +1484,15 @@ def render_dashboard(
       font-weight: 600;
       color: var(--text-muted);
     }}
-    .filter-select {{
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid rgba(99, 102, 241, 0.2);
-      box-shadow: 0 10px 24px -18px rgba(76,81,191,0.55);
-      margin-left: 8px;
-      min-width: 160px;
-      background: #ffffff;
-      font-size: 16px;
-    }}
-    .filter-group {{
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-bottom: 0;
-    }}
+    .month-filter,
     .collaborator-filter {{
       min-width: min(100%, 380px);
       position: relative;
     }}
+    .month-filter {{
+      min-width: min(100%, 230px);
+    }}
+    .month-filter summary,
     .collaborator-filter summary {{
       min-height: 44px;
       display: inline-flex;
@@ -1499,11 +1508,13 @@ def render_dashboard(
       user-select: none;
       font-weight: 600;
     }}
+    .month-filter-count,
     .collaborator-filter-count {{
       color: var(--primary-dark);
       font-size: 0.84rem;
       font-weight: 700;
     }}
+    .month-filter-panel,
     .collaborator-filter-panel {{
       width: min(420px, calc(100vw - 36px));
       margin-top: 8px;
@@ -1514,6 +1525,9 @@ def render_dashboard(
       box-shadow: 0 18px 36px -24px rgba(76,81,191,0.55);
       display: grid;
       gap: 10px;
+    }}
+    .month-filter-panel {{
+      width: min(260px, calc(100vw - 36px));
     }}
     .filter-search {{
       width: 100%;
@@ -1538,6 +1552,7 @@ def render_dashboard(
       font-weight: 700;
       cursor: pointer;
     }}
+    .month-options,
     .collaborator-options {{
       display: grid;
       gap: 4px;
@@ -1545,6 +1560,7 @@ def render_dashboard(
       overflow-y: auto;
       padding-right: 4px;
     }}
+    .month-option,
     .collaborator-option {{
       display: flex;
       align-items: center;
@@ -1555,12 +1571,14 @@ def render_dashboard(
       font-size: 0.9rem;
       cursor: pointer;
     }}
+    .month-option:hover,
     .collaborator-option:hover {{
       background: rgba(243, 244, 255, 0.85);
     }}
     .collaborator-option[hidden] {{
       display: none;
     }}
+    .month-option input,
     .collaborator-option input {{
       accent-color: var(--primary);
     }}
@@ -1682,15 +1700,9 @@ def render_dashboard(
         display: grid;
         gap: 10px;
       }}
-      .filter-group {{
-        display: grid;
-        gap: 6px;
-        width: 100%;
-      }}
-      .filter-select {{
-        width: 100%;
-        margin-left: 0;
-      }}
+      .month-filter,
+      .month-filter summary,
+      .month-filter-panel,
       .collaborator-filter,
       .collaborator-filter summary,
       .collaborator-filter-panel {{
@@ -1811,13 +1823,18 @@ def render_dashboard(
       </div>
     </header>
     <div class="filter-bar">
-      <div class="filter-group">
-        <label class="filter-label" for="global-month-filter">Filtrar por mes:</label>
-        <select id="global-month-filter" class="filter-select">
-          <option value="all"{" selected" if default_month_key == "all" else ""}>Todos</option>
-{options_html}
-        </select>
-      </div>
+      <details class="month-filter">
+        <summary>Meses <span id="month-filter-summary" class="month-filter-count">Todos</span></summary>
+        <div class="month-filter-panel">
+          <div class="filter-actions">
+            <button id="month-select-all" class="filter-action-btn" type="button">Todos</button>
+            <button id="month-clear" class="filter-action-btn" type="button">Limpar</button>
+          </div>
+          <div class="month-options">
+{month_options_html}
+          </div>
+        </div>
+      </details>
       <details class="collaborator-filter">
         <summary>Colaboradores <span id="collaborator-filter-summary" class="collaborator-filter-count">Todos</span></summary>
         <div class="collaborator-filter-panel">
@@ -1870,7 +1887,12 @@ def render_dashboard(
   (function() {{
     const data = {json.dumps(monthly_blocks, ensure_ascii=False)};
     const filterData = {json.dumps(monthly_filter_records, ensure_ascii=False)};
-    const select = document.getElementById("global-month-filter");
+    const rawData = {json.dumps(monthly_raw_records, ensure_ascii=False)};
+    const monthlyTotals = {json.dumps(monthly_totals, ensure_ascii=False)};
+    const monthCheckboxes = Array.from(document.querySelectorAll(".month-checkbox"));
+    const monthSummary = document.getElementById("month-filter-summary");
+    const selectAllMonths = document.getElementById("month-select-all");
+    const clearMonths = document.getElementById("month-clear");
     const collaboratorSearch = document.getElementById("collaborator-search");
     const collaboratorSummary = document.getElementById("collaborator-filter-summary");
     const collaboratorCheckboxes = Array.from(document.querySelectorAll(".collaborator-checkbox"));
@@ -1946,14 +1968,62 @@ def render_dashboard(
       return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
     }}
 
+    function getSelectedMonthKeys() {{
+      return monthCheckboxes.filter((input) => input.checked).map((input) => input.value);
+    }}
+
+    function getCurrentMonthKey() {{
+      const selected = getSelectedMonthKeys();
+      if (!monthCheckboxes.length || selected.length === monthCheckboxes.length) return "all";
+      if (selected.length === 1) return selected[0];
+      return "__custom__";
+    }}
+
+    function refreshMonthSummary() {{
+      if (!monthSummary) return;
+      const selected = getSelectedMonthKeys();
+      if (!monthCheckboxes.length || selected.length === monthCheckboxes.length) {{
+        monthSummary.textContent = "Todos";
+        return;
+      }}
+      if (!selected.length) {{
+        monthSummary.textContent = "Nenhum";
+        return;
+      }}
+      monthSummary.textContent = `${{selected.length}} meses`;
+    }}
+
+    function getCurrentMonthRows() {{
+      const key = getCurrentMonthKey();
+      if (key !== "__custom__") return filterData[key] || filterData["all"] || [];
+      return getSelectedMonthKeys().flatMap((monthKey) => filterData[monthKey] || []);
+    }}
+
+    function getCurrentRawRows() {{
+      const key = getCurrentMonthKey();
+      if (key !== "__custom__") return rawData[key] || rawData["all"] || [];
+      return getSelectedMonthKeys().flatMap((monthKey) => rawData[monthKey] || []);
+    }}
+
+    function getCurrentMonthTotals() {{
+      const key = getCurrentMonthKey();
+      if (key !== "__custom__") return monthlyTotals[key] || monthlyTotals["all"] || {{ entregas: 0, peso: 0 }};
+      return getSelectedMonthKeys().reduce((totals, monthKey) => {{
+        const monthTotal = monthlyTotals[monthKey] || {{ entregas: 0, peso: 0 }};
+        totals.entregas += Number(monthTotal.entregas || 0);
+        totals.peso += Number(monthTotal.peso || 0);
+        return totals;
+      }}, {{ entregas: 0, peso: 0 }});
+    }}
+
     function currentBlock() {{
-      const key = select ? select.value : "all";
+      const key = getCurrentMonthKey();
+      if (key === "__custom__") return buildDynamicBlock();
       return data[key] || data["all"];
     }}
 
     function currentFilterRows() {{
-      const key = select ? select.value : "all";
-      return filterData[key] || filterData["all"] || [];
+      return getCurrentMonthRows();
     }}
 
     function isFilteredSelection(selected) {{
@@ -1976,6 +2046,81 @@ def render_dashboard(
       return Array.from(groups.values()).sort((a, b) =>
         (b.peso - a.peso) || (b.entregas - a.entregas) || (b.valor - a.valor)
       );
+    }}
+
+    function aggregateRows(records, field, role = null) {{
+      const groups = new Map();
+      records.forEach((record) => {{
+        if (role && record.role !== role) return;
+        const name = record[field] || "Nao informado";
+        const key = field === "name" ? record.key : normalizeSearch(name).replace(/\\s+/g, "_");
+        if (!groups.has(key)) {{
+          groups.set(key, {{
+            key,
+            nome: name,
+            colaboradorName: record.name || name,
+            colaboradorKey: record.key || key,
+            entregas: 0,
+            peso: 0,
+            valor: 0,
+          }});
+        }}
+        const group = groups.get(key);
+        group.entregas += Number(record.entregas || 0);
+        group.peso += Number(record.peso || 0);
+        group.valor += Number(record.valor || 0);
+      }});
+      return Array.from(groups.values()).sort((a, b) =>
+        (b.peso - a.peso) || (b.entregas - a.entregas) || (b.valor - a.valor)
+      );
+    }}
+
+    function aggregateDuoRows(records, field, role) {{
+      const groups = new Map();
+      records.forEach((record) => {{
+        if (record.role !== role) return;
+        const extra = record[field] || "Nao informado";
+        const name = `${{record.name}} - ${{extra}}`;
+        const key = `${{record.key}}|${{normalizeSearch(extra)}}`;
+        if (!groups.has(key)) {{
+          groups.set(key, {{
+            key,
+            nome: name,
+            colaboradorName: record.name,
+            colaboradorKey: record.key,
+            entregas: 0,
+            peso: 0,
+            valor: 0,
+          }});
+        }}
+        const group = groups.get(key);
+        group.entregas += Number(record.entregas || 0);
+        group.peso += Number(record.peso || 0);
+        group.valor += Number(record.valor || 0);
+      }});
+      return Array.from(groups.values()).sort((a, b) =>
+        (b.peso - a.peso) || (b.entregas - a.entregas) || (b.valor - a.valor)
+      );
+    }}
+
+    function buildMetricsHtml(totalEntregas, totalPeso) {{
+      return `    <div class="metrics-grid">
+      <article class="metric-card metric-total">
+        <span class="metric-title">Total de entregas</span>
+        <strong class="metric-value">${{formatQuantityValue(totalEntregas)}}</strong>
+        <span class="metric-sub">Quantidade no periodo</span>
+      </article>
+      <article class="metric-card metric-primary">
+        <span class="metric-title">Peso total</span>
+        <strong class="metric-value">${{formatWeight(totalPeso)}}</strong>
+        <span class="metric-sub">Somatorio do periodo</span>
+      </article>
+      <article class="metric-card metric-selected" hidden>
+        <span class="metric-title">Selecionados</span>
+        <strong class="metric-value"><span data-selected-entregas>0</span></strong>
+        <span class="metric-sub"><span data-selected-count>0 colaboradores</span> | <span data-selected-peso>0,00 kg</span></span>
+      </article>
+    </div>`;
     }}
 
     function buildPodiumHtml(rows) {{
@@ -2005,7 +2150,10 @@ def render_dashboard(
     function buildRankingRowsHtml(rows, nameLabel) {{
       return rows.map((row, index) => {{
         const topClass = index < 3 ? ' class="is-top"' : "";
-        return `<tr${{topClass}}>
+        const attrs = row.colaboradorKey
+          ? ` data-colaborador-key="${{escapeHtml(row.colaboradorKey)}}" data-colaborador-name="${{escapeHtml(row.colaboradorName || row.nome)}}" data-colaborador-initials="${{escapeHtml(getInitials(row.colaboradorName || row.nome))}}" data-colaborador-photo="" data-entregas="${{Number(row.entregas || 0).toFixed(6)}}" data-peso="${{Number(row.peso || 0).toFixed(6)}}"`
+          : "";
+        return `<tr${{topClass}}${{attrs}}>
           <td data-label="Rank">${{formatRank(index)}}</td>
           <td data-label="${{escapeHtml(nameLabel)}}">${{escapeHtml(row.nome)}}</td>
           <td data-label="Entregas">${{formatQuantityValue(row.entregas)}}</td>
@@ -2014,16 +2162,19 @@ def render_dashboard(
       }}).join("");
     }}
 
-    function buildAggregateSectionHtml(title, nameLabel, rows) {{
+    function buildAggregateSectionHtml(title, nameLabel, rows, options = {{}}) {{
+      const sectionAttrs = options.filterable ? ' data-filterable-section="colaboradores"' : "";
+      const comparisonAttr = options.comparisonSource ? ' data-comparison-source="colaboradores"' : "";
       if (!rows.length) {{
-        return `<section class="panel">
+        return `<section class="panel"${{sectionAttrs}}${{comparisonAttr}}>
     <div class="section-heading">
       <h2>${{escapeHtml(title)}}</h2>
       <p>Nenhum registro encontrado.</p>
     </div>
   </section>`;
       }}
-      return `<section class="panel">
+      const podiumHtml = options.showPodium === false ? "" : buildPodiumHtml(rows);
+      return `<section class="panel"${{sectionAttrs}}${{comparisonAttr}}>
     <div class="section-heading">
       <div class="section-heading-top">
         <h2>${{escapeHtml(title)}}</h2>
@@ -2031,7 +2182,7 @@ def render_dashboard(
       </div>
       <p>Ranking baseado em peso total e entregas.</p>
     </div>
-${{buildPodiumHtml(rows)}}
+${{podiumHtml}}
     <div class="ranking-table">
       <table>
         <thead>
@@ -2062,6 +2213,54 @@ ${{buildRankingRowsHtml(rows, nameLabel)}}
       targets.placas.innerHTML = buildAggregateSectionHtml("Placas", "Placa", aggregateSelectedRows(selected, "placa"));
       targets.clientes.innerHTML = buildAggregateSectionHtml("Clientes", "Cliente", aggregateSelectedRows(selected, "cliente"));
       targets.cidades.innerHTML = buildAggregateSectionHtml("Cidades", "Cidade", aggregateSelectedRows(selected, "cidade"));
+    }}
+
+    function buildDynamicBlock() {{
+      const collaboratorRows = getCurrentMonthRows();
+      const rawRows = getCurrentRawRows();
+      const totals = getCurrentMonthTotals();
+      return {{
+        metrics: buildMetricsHtml(totals.entregas, totals.peso),
+        motoristas: buildAggregateSectionHtml(
+          "Motoristas",
+          "Colaborador",
+          aggregateRows(collaboratorRows, "name", "motorista"),
+          {{ filterable: true, comparisonSource: true }}
+        ),
+        ajudantes: buildAggregateSectionHtml(
+          "Ajudantes",
+          "Colaborador",
+          aggregateRows(collaboratorRows, "name", "ajudante"),
+          {{ filterable: true, comparisonSource: true }}
+        ),
+        placas: buildAggregateSectionHtml("Placas", "Placa", aggregateRows(rawRows, "placa")),
+        clientes: buildAggregateSectionHtml("Clientes", "Cliente", aggregateRows(rawRows, "cliente")),
+        cidades: buildAggregateSectionHtml("Cidades", "Cidade", aggregateRows(rawRows, "cidade")),
+        mot_cidade: buildAggregateSectionHtml(
+          "Motoristas por cidade",
+          "Motorista - Cidade",
+          aggregateDuoRows(collaboratorRows, "cidade", "motorista"),
+          {{ filterable: true, showPodium: false }}
+        ),
+        aj_cidade: buildAggregateSectionHtml(
+          "Ajudantes por cidade",
+          "Ajudante - Cidade",
+          aggregateDuoRows(collaboratorRows, "cidade", "ajudante"),
+          {{ filterable: true, showPodium: false }}
+        ),
+        mot_cliente: buildAggregateSectionHtml(
+          "Motoristas por cliente",
+          "Motorista - Cliente",
+          aggregateDuoRows(collaboratorRows, "cliente", "motorista"),
+          {{ filterable: true, showPodium: false }}
+        ),
+        aj_cliente: buildAggregateSectionHtml(
+          "Ajudantes por cliente",
+          "Ajudante - Cliente",
+          aggregateDuoRows(collaboratorRows, "cliente", "ajudante"),
+          {{ filterable: true, showPodium: false }}
+        ),
+      }};
     }}
 
     function updateMetricCard(selector, value, subtitle) {{
@@ -2257,8 +2456,10 @@ ${{buildRankingRowsHtml(rows, nameLabel)}}
       }});
     }}
 
-    function render(key) {{
-      const block = data[key] || data["all"];
+    function render() {{
+      refreshMonthSummary();
+      const key = getCurrentMonthKey();
+      const block = key === "__custom__" ? buildDynamicBlock() : (data[key] || data["all"]);
       if (!block) return;
       targets.metrics.innerHTML = block.metrics;
       targets.motoristas.innerHTML = block.motoristas;
@@ -2336,7 +2537,8 @@ ${{buildRankingRowsHtml(rows, nameLabel)}}
       }});
       wrapper.remove();
 
-      const monthLabel = select ? select.options[select.selectedIndex].textContent : "todos";
+      const selectedMonths = getSelectedMonthKeys();
+      const monthLabel = getCurrentMonthKey() === "all" ? "todos" : `${{selectedMonths.length}}-meses`;
       const fileName = `${{slugify(title.textContent)}}-${{slugify(monthLabel)}}.png`;
       const link = document.createElement("a");
       link.href = canvas.toDataURL("image/png");
@@ -2384,11 +2586,27 @@ ${{buildRankingRowsHtml(rows, nameLabel)}}
       }});
     }}
 
-    if (select) {{
-      select.addEventListener("change", () => render(select.value));
+    monthCheckboxes.forEach((input) => {{
+      input.addEventListener("change", render);
+    }});
+    if (selectAllMonths) {{
+      selectAllMonths.addEventListener("click", () => {{
+        monthCheckboxes.forEach((input) => {{
+          input.checked = true;
+        }});
+        render();
+      }});
+    }}
+    if (clearMonths) {{
+      clearMonths.addEventListener("click", () => {{
+        monthCheckboxes.forEach((input) => {{
+          input.checked = false;
+        }});
+        render();
+      }});
     }}
     applyCollaboratorSearch();
-    render(select ? select.value : "all");
+    render();
   }})();
 </script>
 </body>
@@ -2442,6 +2660,14 @@ def main() -> None:
 
     monthly_blocks: dict[str, dict[str, str]] = {}
     monthly_filter_records: dict[str, list[dict[str, object]]] = {}
+    monthly_raw_records: dict[str, list[dict[str, object]]] = {}
+    monthly_totals: dict[str, dict[str, float]] = {}
+
+    def total_record(df_subset: pd.DataFrame) -> dict[str, float]:
+        return {
+            "entregas": float(df_subset["entregas"].sum()),
+            "peso": float(df_subset["peso"].sum()),
+        }
 
     def compute_blocks(df_subset: pd.DataFrame, label_periodo: str) -> dict[str, str]:
         mot, aj = resumir_colaboradores(df_subset, role_map=role_map)
@@ -2545,12 +2771,16 @@ def main() -> None:
     # All
     monthly_blocks["all"] = compute_blocks(df, period_text(df))
     monthly_filter_records["all"] = build_filter_records(df, role_map)
+    monthly_raw_records["all"] = build_raw_records(df)
+    monthly_totals["all"] = total_record(df)
 
     # Per month
     for key, _label in month_options:
         subset = df[df["data"].dt.strftime("%Y-%m") == key]
         monthly_blocks[key] = compute_blocks(subset, period_text(subset))
         monthly_filter_records[key] = build_filter_records(subset, role_map)
+        monthly_raw_records[key] = build_raw_records(subset)
+        monthly_totals[key] = total_record(subset)
 
     html = render_dashboard(
         motoristas,
@@ -2558,6 +2788,8 @@ def main() -> None:
         month_options,
         monthly_blocks,
         monthly_filter_records,
+        monthly_raw_records,
+        monthly_totals,
         periodo=df["data"].dropna().tolist(),
         photo_map=photo_map,
     )
